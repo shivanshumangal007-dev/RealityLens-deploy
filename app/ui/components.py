@@ -43,10 +43,22 @@ def _as_text(value: object) -> str:
 	return str(value)
 
 
-if hasattr(sys, "_MEIPASS"):
-	STYLE_PATH = Path(sys._MEIPASS) / "src" / "ui" / "style.qss"
-else:
-	STYLE_PATH = Path(__file__).with_name("style.qss")
+
+def _resolve_style_path() -> Path:
+	if hasattr(sys, "_MEIPASS"):
+		base_path = Path(sys._MEIPASS)
+		candidates = [
+			base_path / "app" / "ui" / "style.qss",
+			base_path / "src" / "ui" / "style.qss",
+			base_path / "ui" / "style.qss",
+		]
+		for candidate in candidates:
+			if candidate.exists():
+				return candidate
+	return Path(__file__).with_name("style.qss")
+
+
+STYLE_PATH = _resolve_style_path()
 	
 
 def _load_popup_style(accent_color: str) -> str:
