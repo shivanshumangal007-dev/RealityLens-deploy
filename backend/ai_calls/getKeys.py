@@ -32,8 +32,8 @@ else:
 
 
 tavily_api_key = os.getenv("TAVILY_API_KEY", "").strip()
-api_keys = os.getenv("GEMINI_API_KEY", "").split(",")
-api_keys = [k.strip() for k in api_keys if k.strip()]
+gemini_api_keys = os.getenv("GEMINI_API_KEY", "").split(",")
+gemini_api_keys = [k.strip() for k in gemini_api_keys if k.strip()]
 groq_api_key = os.getenv("GROQ_API_KEY", "").strip()
 
 
@@ -54,3 +54,5 @@ vision_models = [
     "meta-llama/llama-4-maverick-17b-128e-instruct",
 ]
 
+def get_gemini_client(api_key):
+    return genai.Client(api_key=api_key)
