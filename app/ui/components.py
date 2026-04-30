@@ -296,7 +296,7 @@ class AnalyzerWorker(QObject):
 	finished = pyqtSignal(object)
 	status_changed = pyqtSignal(str)
 
-	def __init__(self, image_path: str, server_url: str = "https://realitylens-demo.onrender.com"):
+	def __init__(self, image_path: str, server_url: str = "https://realitylens-9qu1.onrender.com"):
 		super().__init__()
 		self.image_path = image_path
 		self.server_url = server_url
