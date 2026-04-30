@@ -27,13 +27,18 @@ def verify_content(image_path, on_status=None):
     _set_current_situation("Extracting information from screenshot...", on_status)
     extraction = extractCall.extractionCall(image_path)
     
-
+    print(extraction)
+    print("hello")
     # extractionCall returns either a dict or an error string/dict
     if isinstance(extraction, str):
         return extraction
     if isinstance(extraction, dict) and extraction.get("error"):
         return extraction
+    
 
+    if "verdict" in extraction:
+        return extraction
+    
     # Phase 2: search
     _set_current_situation("Searching for relevant information...", on_status)
     search_text = searchCall.searchCall(extraction)
