@@ -1,13 +1,15 @@
 [project]
 name = "realitylens"
 version = "0.1.0"
-description = "Add your description here"
+description = "AI-powered fact verification tool using screenshot analysis"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "dotenv>=0.9.9",
+    "fastapi>=0.104.0",
     "google-genai>=1.70.0",
     "google-generativeai>=0.8.6",
+    "groq>=0.4.0",
     "keyboard>=0.13.5",
     "pillow>=12.2.0",
     "pyautogui>=0.9.54",
@@ -15,7 +17,12 @@ dependencies = [
     "pyqt6>=6.11.0",
     "pyscreeze>=1.0.1",
     "python-dotenv>=1.2.2",
-    "uv>=0.11.3",
+    "slowapi>=0.1.9",
+    "sqlalchemy>=2.0.0",
+    "tavily-python>=0.2.0",
+    "uvicorn>=0.24.0",
+    "uvloop>=0.19.0",
+    "websockets>=12.0",
     # macOS-specific dependencies
     "pyobjc-framework-cocoa>=12.1; sys_platform == 'darwin'",
     "pyobjc-framework-quartz>=12.1; sys_platform == 'darwin'",

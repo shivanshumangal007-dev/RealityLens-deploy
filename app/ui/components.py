@@ -1,7 +1,17 @@
+import asyncio
+import sys
+
+import websockets
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 import os
 import re
 from pathlib import Path
 import sys
+from urllib import response
+import uuid
+
 from PyQt6.QtGui import QCursor
 from PyQt6.QtCore import QObject, QTimer, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
@@ -15,6 +25,8 @@ from PyQt6.QtWidgets import (
 	QWidget,
 )
 import requests
+import threading
+import time
 
 def resource_path(relative_path):
     if hasattr(sys, "_MEIPASS"):
@@ -290,51 +302,143 @@ def build_readable_markdown(text: object, confidence: int, reality: int, verdict
 		raw_text,
 	])
 
+server_url = os.getenv("DEPLOYED_SERVER_URL") or "http://localhost:8000"
 
 class AnalyzerWorker(QObject):
 	# Change 'str' to 'object' to allow dictionaries
 	finished = pyqtSignal(object)
 	status_changed = pyqtSignal(str)
 
-	def __init__(self, image_path: str, server_url: str = "https://realitylens-9qu1.onrender.com"):
+	def __init__(self, image_path: str, server_url: str = server_url):
 		super().__init__()
 		self.image_path = image_path
 		self.server_url = server_url
 		self.is_running = True
+		self.job_id = None
+		self.device_id = self._get_device_id()
+	
 
+	def _get_device_id(self) -> str:
+
+		id_file = os.path.join(os.path.expanduser("~"), ".realitylens_device_id")
+		if os.path.exists(id_file):
+			return open(id_file).read().strip()
+		device_id = str(uuid.uuid4())
+		open(id_file, "w").write(device_id)
+		return device_id
+
+	# def run(self):
+	# 	# Step 1: submit image, get job_id immediately
+	# 	try:
+	# 		submit_url = f"{self.server_url}/submit"
+	# 		response = requests.post(
+	# 			submit_url,
+	# 			files={"file": open(self.image_path, "rb")},
+	# 			headers={"Device-ID": self.device_id},
+	# 		)
+	# 		if response.status_code == 429:
+	# 			self.finished.emit({"error": "Rate limit exceeded. Please wait before trying again."})
+	# 			return
+	# 		response.raise_for_status()
+	# 		self.job_id = response.json()["job_id"]
+
+	# 	except Exception as e:
+	# 		self.finished.emit({"error": f"Failed to submit image: {e}"})
+	# 		return
+		
+	# 	# Step 2: poll status in background
+
+	# 	status_thread = threading.Thread(target=self._poll_status, daemon=True)
+	# 	status_thread.start()
+
+	# 	# Step 3: poll for result
+
+	# 	result_url = f"{self.server_url}/result/{self.job_id}"
+
+	# 	while self.is_running:
+	# 		try:
+	# 			response = requests.get(result_url, timeout=2)
+	# 			if response.status_code == 200:
+	# 				self.finished.emit(response.json())
+	# 				return
+	# 			elif response.status_code != 202:
+	# 				self.finished.emit({"error": f"Unexpected status code: {response.status_code}"})
+	# 				return
+	# 		except Exception as e:
+	# 			self.finished.emit({"error": f"Failed to get result: {e}"})
+	# 			return
+
+	# 		time.sleep(1)  # Poll every second
+
+	# def _poll_status(self):
+	# 	while self.is_running:
+	# 		try:
+	# 			status_url = f"{self.server_url}/status/{self.job_id}"
+	# 			response = requests.get(status_url, timeout=2)
+	# 			if response.status_code == 200:
+	# 				status = response.json().get("status", "")
+	# 				if status and status not in ("pending", "done", "failed"):
+	# 					self.status_changed.emit(status)
+	# 		except Exception as e:
+	# 			pass  # Silently ignore status polling errors
+	# 		time.sleep(0.5)  # Poll every 500ms
 	def run(self):
-		import threading
-		import time
-		
-		# Start polling for status in background thread
-		status_thread = threading.Thread(target=self._poll_status, daemon=True)
-		status_thread.start()
-		
-		# Make the main request
-		url = f"{self.server_url}/ai_client"
+		# Step 1: Submit image via HTTP (Keep this as is)
 		try:
-			result = requests.post(url, files={"file": open(self.image_path, "rb")}).text
-			self.finished.emit(result)
+			submit_url = f"{self.server_url}/submit"
+			# We use a context manager for the file to ensure it closes properly
+			with open(self.image_path, "rb") as f:
+				response = requests.post(
+					submit_url,
+					files={"file": f},
+					headers={"Device-ID": self.device_id},
+				)
+			
+			if response.status_code == 429:
+				self.finished.emit({"error": "Rate limit exceeded."})
+				return
+				
+			response.raise_for_status()
+			self.job_id = response.json()["job_id"]
+			self.status_changed.emit("Extracting information from screenshot...")
+
 		except Exception as e:
-			self.finished.emit(f"Error: {str(e)}")
-		finally:
-			self.is_running = False
+			self.finished.emit({"error": f"Submission failed: {e}"})
+			return
 
-	def _poll_status(self):
-		import time
-		while self.is_running:
-			try:
-				status_url = f"{self.server_url}/status"
-				response = requests.get(status_url, timeout=2)
-				if response.status_code == 200:
-					data = response.json()
-					status = data.get("current_situation", "")
-					if status:
+		# Step 2: Use an asyncio loop to handle the WebSocket
+		# Since your 'run' is likely in a QThread, we run a small event loop here
+		asyncio.run(self._listen_to_websocket())
+
+	async def _listen_to_websocket(self):
+		# Convert 'http://' to 'ws://'
+		ws_url = self.server_url.replace("http", "ws") + f"/ws/job/{self.job_id}"
+		
+		try:
+			async with websockets.connect(ws_url) as websocket:
+				while self.is_running:
+					# This 'awaits' until the server actually sends something
+					message = await websocket.recv()
+					data = json.loads(message)
+
+					status = data.get("status")
+					if status and status not in {"done", "failed", "completed"}:
 						self.status_changed.emit(status)
-			except Exception as e:
-				pass  # Silently ignore status polling errors
-			time.sleep(0.5)  # Poll every 500ms
+					elif status in {"done", "completed"}:
+						self.status_changed.emit("Analysis complete.")
 
+					# If the job is done or failed, exit and emit the final result
+					if status in ["completed", "failed", "done"]:
+						if data.get("error"):
+							self.finished.emit({"error": data["error"]})
+						elif data.get("result") is not None:
+							self.finished.emit(data["result"])
+						else:
+							self.finished.emit({"error": "Job finished without a result."})
+						return
+
+		except Exception as e:
+			self.finished.emit({"error": f"WebSocket connection lost: {e}"})
 
 class AnchoredPopup(QWidget):
 	def move_to_bottom_right(self, margin: int = 20):
