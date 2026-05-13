@@ -302,7 +302,7 @@ def build_readable_markdown(text: object, confidence: int, reality: int, verdict
 		raw_text,
 	])
 
-server_url = os.getenv("DEPLOYED_SERVER_URL") or "http://localhost:8000"
+server_url = "https://realitylens-9qu1.onrender.com"
 
 class AnalyzerWorker(QObject):
 	# Change 'str' to 'object' to allow dictionaries
