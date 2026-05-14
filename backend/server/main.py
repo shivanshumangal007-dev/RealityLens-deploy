@@ -202,6 +202,8 @@ async def websocket_endpoint(websocket: WebSocket, job_id: str):
             await websocket.close()
 
 
+
+
 @app.get("/health_check")
 async def health_check():
     return {"status": "healthy"}
