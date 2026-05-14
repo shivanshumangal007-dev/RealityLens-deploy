@@ -197,6 +197,8 @@ class SnippingOverlay(QWidget):
                 save_path = os.path.join(os.path.expanduser("~"), "captured_claim.png")
 
             # Find which screen contains the selection
+
+
             target_screen = QApplication.primaryScreen()
             for screen in QApplication.screens():
                 if screen.geometry().contains(x, y):
@@ -207,7 +209,8 @@ class SnippingOverlay(QWidget):
             local_x = x - screen_geo.x()
             local_y = y - screen_geo.y()
             pixmap = target_screen.grabWindow(0, local_x, local_y, w, h)
-            pixmap.save(save_path, "PNG")
+            save_path = save_path.replace(".png", ".jpg")  # Save as JPEG to reduce file size
+            pixmap.save(save_path, "JPEG", 70)  # Adjust quality for smaller size
 
             print(f"📸 Screenshot saved to: {save_path}")
             print("🧠 RealityLens is verifying...")
