@@ -7,8 +7,8 @@ from datetime import datetime, timezone, timedelta
 import uuid
 
 
-RATE_LIMIT_MAX = 1000
-RATE_LIMIT_WINDOW_HOURS = 24
+RATE_LIMIT_MAX = 30
+RATE_LIMIT_WINDOW_HOURS = 1
 
 
 async def create_job(db: AsyncSession, device_id: str, user_id: uuid.UUID | None) -> Job:
