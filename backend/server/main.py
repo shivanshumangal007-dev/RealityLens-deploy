@@ -35,6 +35,35 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 executor = ThreadPoolExecutor(max_workers=3)
 
 
+from .redisDatabase import redis_db
+
+async def rate_limit_using_redis(device_id: str) -> bool:
+    MAX_REQUESTS = 5
+    WINDOW_SECONDS = 60
+
+    # We create a unique key for this specific user/device
+    # Example key: "rate_limit:abc-123-device-id"
+    redis_key = f"rate_limit:{device_id}"
+
+    # Get their current request count
+    current_count = await redis_db.get(redis_key)
+
+    if current_count and int(current_count) >= MAX_REQUESTS:
+        # They hit the limit!
+        return False
+    
+    # If they haven't hit the limit, we use a Redis "pipeline" to do two things at exactly the same time:
+    # 1. Increase their count by 1
+    # 2. If it's their very first request, start the 60-second self-destruct timer
+    pipe = redis_db.pipeline()
+    pipe.incr(redis_key)
+    
+    if not current_count:
+        pipe.expire(redis_key, WINDOW_SECONDS)
+        
+    await pipe.execute()
+    return True
+
 # ── Startup ──────────────────────────────────────────────────────────────────
 
 
@@ -120,7 +149,7 @@ async def submit_endpoint(
     device_id: str = Header(...),
     db: AsyncSession = Depends(get_db),
 ):
-    allowed = await check_rate_limit(db, device_id)
+    allowed = await rate_limit_using_redis(device_id)
     if not allowed:
         raise HTTPException(status_code=429, detail="Rate limit exceeded")
 
@@ -154,56 +183,59 @@ async def result_endpoint(job_id: str, db: AsyncSession = Depends(get_db)):
         return Response(status_code=202)
     return job.result
 
-
-from fastapi import WebSocket, WebSocketDisconnect
-from sqlalchemy import select
-import asyncio
-from .models import Job
-
-@app.websocket("/ws/job/{job_id}")
-async def websocket_endpoint(websocket: WebSocket, job_id: str):
-    await websocket.accept()
-    last_status = None
-    
-    try:
-        while True:
-            # Fetch with a fresh session each poll so status/result updates are visible.
-            async with AsyncSessionLocal() as db:
-                result = await db.execute(select(Job).filter(Job.id == uuid.UUID(job_id)))
-                job = result.scalar_one_or_none()
-
-            if not job:
-                await websocket.send_json({"error": "Job not found"})
-                break
-
-            # 2. Only send an update if the status or result actually changed
-            if job.status != last_status or job.status == "done":
-                payload = {
-                    "status": job.status,
-                    "result": job.result if job.status == "done" else None,
-                    "error": job.error
-                }
-                await websocket.send_json(payload)
-                last_status = job.status
-
-            # 3. If finished, close the connection
-            if job.status in ["done", "failed", "completed"]:
-                break
-
-            # Wait a bit before checking the DB again (Don't spam your own DB!)
-            await asyncio.sleep(1) 
-
-    except WebSocketDisconnect:
-        print(f"Client disconnected from job {job_id}")
-    except Exception as e:
-        print(f"WS Error: {e}")
-    finally:
-        if websocket.client_state.name != "DISCONNECTED":
-            await websocket.close()
-
-
-
-
 @app.get("/health_check")
 async def health_check():
     return {"status": "healthy"}
+
+
+
+# from fastapi import WebSocket, WebSocketDisconnect
+# from sqlalchemy import select
+# import asyncio
+# from .models import Job
+
+# @app.websocket("/ws/job/{job_id}")
+# async def websocket_endpoint(websocket: WebSocket, job_id: str):
+#     await websocket.accept()
+#     last_status = None
+    
+#     try:
+#         while True:
+#             # Fetch with a fresh session each poll so status/result updates are visible.
+#             async with AsyncSessionLocal() as db:
+#                 result = await db.execute(select(Job).filter(Job.id == uuid.UUID(job_id)))
+#                 job = result.scalar_one_or_none()
+
+#             if not job:
+#                 await websocket.send_json({"error": "Job not found"})
+#                 break
+
+#             # 2. Only send an update if the status or result actually changed
+#             if job.status != last_status or job.status == "done":
+#                 payload = {
+#                     "status": job.status,
+#                     "result": job.result if job.status == "done" else None,
+#                     "error": job.error
+#                 }
+#                 await websocket.send_json(payload)
+#                 last_status = job.status
+
+#             # 3. If finished, close the connection
+#             if job.status in ["done", "failed", "completed"]:
+#                 break
+
+#             # Wait a bit before checking the DB again (Don't spam your own DB!)
+#             await asyncio.sleep(1) 
+
+#     except WebSocketDisconnect:
+#         print(f"Client disconnected from job {job_id}")
+#     except Exception as e:
+#         print(f"WS Error: {e}")
+#     finally:
+#         if websocket.client_state.name != "DISCONNECTED":
+#             await websocket.close()
+
+
+
+
+

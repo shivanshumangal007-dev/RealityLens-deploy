@@ -23,6 +23,7 @@ if sys.platform == "win32" and getattr(sys, 'frozen', False):
 from PyQt6.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QWidget, QMessageBox
 from PyQt6.QtGui import QPainter, QColor, QPen
 from PyQt6.QtCore import Qt, QRect, pyqtSignal, QObject, QThread
+# pyrefly: ignore [missing-import]
 from ui.components import ResultPopup, LoadingPopup, AnalyzerWorker
 
 os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
