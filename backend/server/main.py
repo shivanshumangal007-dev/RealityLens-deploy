@@ -6,11 +6,12 @@ import sys
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+from sqlalchemy import select, update, delete
 
 import uuid
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-
+from .models import Job
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Header, Depends, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -182,6 +183,21 @@ async def result_endpoint(job_id: str, db: AsyncSession = Depends(get_db)):
     if job.status not in ("done", "completed"):
         return Response(status_code=202)
     return job.result
+
+
+@app.get("/history/{device_id}")
+async def history_endpoint(device_id: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Job).filter(Job.device_id == device_id).order_by(Job.created_at.desc()))
+    history_list = [ {
+            "id": str(job.id),
+            "created_at": job.created_at,
+            "status": job.status,
+            "result": job.result,   
+            "error": job.error,
+            "device_id": job.device_id
+        } for job in result.scalars() ]
+    return history_list
+
 
 @app.get("/health_check")
 async def health_check():
