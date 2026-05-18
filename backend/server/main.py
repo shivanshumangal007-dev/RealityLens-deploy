@@ -35,7 +35,7 @@ from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 
-    
+
 async def delete_old_rows():
     # Use your session maker directly in an async with block
     async with AsyncSessionLocal() as db:
@@ -76,6 +76,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="RealityLens Backend")
 
+#this is where the captured_img is stored
 UPLOAD_DIR = "temp_uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
@@ -83,10 +84,12 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 executor = ThreadPoolExecutor(max_workers=3)
 
 
+#this is where we use redis to check if the device id is valid
 from .redisDatabase import redis_db
 
+
 async def rate_limit_using_redis(device_id: str) -> bool:
-    MAX_REQUESTS = 5
+    MAX_REQUESTS = 60
     WINDOW_SECONDS = 60
 
     # We create a unique key for this specific user/device
@@ -119,7 +122,7 @@ async def rate_limit_using_redis(device_id: str) -> bool:
 async def startup():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        # Handle simple migrations for newly added columns
+        # Handle simple migrations for newly added columns so any changes in the models doesnt crash the server
         from sqlalchemy import text
         try:
             await conn.execute(text("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE SET NULL"))
@@ -129,13 +132,15 @@ async def startup():
             await conn.execute(text("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS username VARCHAR"))
         except Exception as e:
             print("Migration error username:", e)
+
+    
     async with AsyncSessionLocal() as db:
         await cleanup_stale_jobs(db)
 
 
 
 
-
+# the main function for verification 
 def verify_content(image_path, on_status=None):
     # Phase 1: extraction
     
@@ -167,14 +172,17 @@ def verify_content(image_path, on_status=None):
     status("Analysis complete.")
     return result
 
+
+# changing the status in the database for a job after the analysis
 def make_status_callback(job_id: str):
     """Returns a callable that writes status updates to the db synchronously."""
+
     def callback(message: str):
         async def _update():
             async with AsyncSessionLocal() as db:
                 await update_job_status(db, uuid.UUID(job_id), message)
 
-
+        # we need to create a new event loop because we are not in an async function
         loop = asyncio.new_event_loop()
         try:
             loop.run_until_complete(_update())
@@ -182,17 +190,19 @@ def make_status_callback(job_id: str):
             loop.close()
     return callback
 
-
+# this is the function that runs the verify_content function
 async def run_analysis(job_id: str, file_path: str):
     async with AsyncSessionLocal() as db:
         try:
             loop = asyncio.get_event_loop()
+            # run_in_executor runs the function in a separate thread, this thread runs the verify_content
             result = await loop.run_in_executor(
                 executor,
                 verify_content,
                 file_path,
                 make_status_callback(job_id),
             )
+            #this basically makes the changes in the database
             await complete_job(db, uuid.UUID(job_id), result)
         except Exception as e:
             print(f"❌ run_analysis failed for job {job_id}: {e}")  # add this
@@ -202,7 +212,7 @@ async def run_analysis(job_id: str, file_path: str):
                 os.remove(file_path)
 
 
-
+# the api for submittimg the image
 @app.post("/submit")
 async def submit_endpoint(
     background_tasks: BackgroundTasks,
@@ -210,32 +220,39 @@ async def submit_endpoint(
     device_id: str = Header(...),
     db: AsyncSession = Depends(get_db),
 ):
+    #first check if the device id is valid
     allowed = await rate_limit_using_redis(device_id)
     if not allowed:
         raise HTTPException(status_code=429, detail="Rate limit exceeded")
 
+    #then save the job in the database    
     job = await create_job(db, device_id=device_id, user_id=None)
     file_path = os.path.join(UPLOAD_DIR, f"{job.id}_{file.filename}")
 
+    #saving the image 
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
-
+    #this is a background task, meaning it runs in the background and does not block the main thread
     background_tasks.add_task(run_analysis, str(job.id), file_path)
+    #this is what we get when we submit the image
     return {"job_id": str(job.id)}
 
-
+# this is a simple api to get the status of a job
 @app.get("/status/{job_id}")
 async def status_endpoint(job_id: str, db: AsyncSession = Depends(get_db)):
+    #get the job from the database
     job = await get_job(db, uuid.UUID(job_id))
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+    #return the status of the job
     return {"status": job.status}
 
-
-
+#this is an api to get the result of a job
 @app.get("/result/{job_id}")
 async def result_endpoint(job_id: str, db: AsyncSession = Depends(get_db)):
+    #get the job from the database
     job = await get_job(db, uuid.UUID(job_id))
+    #if the job is not found
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     if job.status == "failed":
@@ -245,9 +262,12 @@ async def result_endpoint(job_id: str, db: AsyncSession = Depends(get_db)):
     return job.result
 
 
+#this is an api to get the history of a job
 @app.get("/history/{device_id}")
 async def history_endpoint(device_id: str, db: AsyncSession = Depends(get_db)):
+    #get the job from the database
     result = await db.execute(select(Job).filter(Job.device_id == device_id).order_by(Job.created_at.desc()))
+    #return the history of the job
     history_list = [ {
             "id": str(job.id),
             "created_at": job.created_at,

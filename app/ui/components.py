@@ -28,6 +28,7 @@ import requests
 import threading
 import time
 
+#this is a function that helps to find the path to the resource files again this was useful when i had the standalone app
 def resource_path(relative_path):
     if hasattr(sys, "_MEIPASS"):
         base_path = sys._MEIPASS
@@ -38,6 +39,7 @@ def resource_path(relative_path):
 
 import json
 
+# to parse the json of the result
 def try_parse_json(data):
     if isinstance(data, dict):
         return data
@@ -46,7 +48,7 @@ def try_parse_json(data):
     except Exception:
         return None
 
-
+#change json to string (as promised)
 def _as_text(value: object) -> str:
 	if value is None:
 		return ""
@@ -55,7 +57,7 @@ def _as_text(value: object) -> str:
 	return str(value)
 
 
-
+# oh this one, i got an error because i used the wrong name and fixed it using this
 def _resolve_style_path() -> Path:
 	if hasattr(sys, "_MEIPASS"):
 		base_path = Path(sys._MEIPASS)
@@ -80,7 +82,7 @@ def _load_popup_style(accent_color: str) -> str:
 		style_text = ""
 	return style_text.replace("__ACCENT__", accent_color)
 
-
+#the result has scores between 0 and 1 so turn it into percent (again dont fix it if it aint broke)
 def _to_percent(raw: object) -> int | None:
 	try:
 		value = float(raw)
