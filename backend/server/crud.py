@@ -5,15 +5,15 @@ from sqlalchemy.dialects.postgresql import insert
 from .models import Job, RateLimit, User
 from datetime import datetime, timezone, timedelta
 import uuid
-
+import getpass
 
 RATE_LIMIT_MAX = 30
 RATE_LIMIT_WINDOW_HOURS = 1
 
 
 async def create_job(db: AsyncSession, device_id: str, user_id: uuid.UUID | None) -> Job:
-
-    job = Job(user_id=user_id, device_id=device_id, status="pending")
+    username = getpass.getuser()
+    job = Job(user_id=user_id, device_id=device_id, username=username, status="pending")
     db.add(job)
     await db.commit()
     await db.refresh(job)
@@ -85,6 +85,18 @@ async def cleanup_stale_jobs(db: AsyncSession):
         delete(Job).where(Job.created_at < cutoff, Job.status.notin_(["done", "completed", "failed"]))
     )
     await db.commit()
+
+async def delete_old_rows(db: AsyncSession):
+    cutoff_time = datetime.now(timezone.utc) - timedelta(days=10)
+    
+    # Create the deletion query
+    stmt = delete(Job).where(Job.created_at < cutoff_time)
+    
+    # Execute and commit
+    await db.execute(stmt)
+    await db.commit()
+
+    print(f"Deleted jobs older than 3 days at {datetime.now(timezone.utc)}")
 
 
 async def get_user_jobs(db: AsyncSession, user_id: uuid.UUID) -> list[Job]:

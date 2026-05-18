@@ -3,6 +3,7 @@ import shutil
 
 import asyncio
 import sys
+from datetime import datetime, timezone, timedelta
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -25,7 +26,53 @@ from .crud import (
     get_job,
     check_rate_limit,
     cleanup_stale_jobs,
+    delete_old_rows,
 )
+
+
+from fastapi import FastAPI
+from contextlib import asynccontextmanager
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+
+    
+async def delete_old_rows():
+    # Use your session maker directly in an async with block
+    async with AsyncSessionLocal() as db:
+        try:
+            cutoff_time = datetime.now(timezone.utc) - timedelta(days=10)
+            
+            # Create the deletion query
+            stmt = delete(Job).where(Job.created_at < cutoff_time)
+            
+            # Execute and commit
+            await db.execute(stmt)
+            await db.commit()
+
+            # Fixed the print statement to match the 10 days!
+            print(f"Deleted jobs older than 10 days at {datetime.now(timezone.utc)}")
+            
+        except Exception as e:
+            # Always good to catch errors in background tasks so they don't crash silently
+            print(f"Error during background deletion: {e}")
+            await db.rollback()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Initialize the scheduler
+    scheduler = AsyncIOScheduler()
+    
+    # 2. Pass the function name WITHOUT calling it. No Depends() allowed here.
+    scheduler.add_job(delete_old_rows, 'cron', hour=0, minute=0)
+    
+    # Start the scheduler
+    scheduler.start()
+    
+    yield
+    
+    # Shut down the scheduler cleanly when FastAPI stops
+    scheduler.shutdown()
+
 
 app = FastAPI(title="RealityLens Backend")
 
@@ -72,8 +119,21 @@ async def rate_limit_using_redis(device_id: str) -> bool:
 async def startup():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Handle simple migrations for newly added columns
+        from sqlalchemy import text
+        try:
+            await conn.execute(text("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE SET NULL"))
+        except Exception as e:
+            print("Migration error user_id:", e)
+        try:
+            await conn.execute(text("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS username VARCHAR"))
+        except Exception as e:
+            print("Migration error username:", e)
     async with AsyncSessionLocal() as db:
         await cleanup_stale_jobs(db)
+
+
+
 
 
 def verify_content(image_path, on_status=None):
@@ -192,7 +252,7 @@ async def history_endpoint(device_id: str, db: AsyncSession = Depends(get_db)):
             "id": str(job.id),
             "created_at": job.created_at,
             "status": job.status,
-            "result": job.result,   
+            "result": job.result,
             "error": job.error,
             "device_id": job.device_id
         } for job in result.scalars() ]
@@ -202,6 +262,9 @@ async def history_endpoint(device_id: str, db: AsyncSession = Depends(get_db)):
 @app.get("/health_check")
 async def health_check():
     return {"status": "healthy"}
+
+
+
 
 
 
