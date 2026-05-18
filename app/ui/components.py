@@ -332,6 +332,7 @@ class AnalyzerWorker(QObject):
 
 	def run(self):
 		try:
+			self.status_changed.emit("Uploading screenshot...")
 			# Step 1: submit image, get job_id immediately
 			try:
 				submit_url = f"{self.server_url}/submit"
@@ -345,6 +346,7 @@ class AnalyzerWorker(QObject):
 					return
 				response.raise_for_status()
 				self.job_id = response.json()["job_id"]
+				self.status_changed.emit("Extracting information from screenshot...")
 
 			except Exception as e:
 				self.finished.emit({"error": f"Failed to submit image: {e}"})
