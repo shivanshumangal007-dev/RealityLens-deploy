@@ -5,11 +5,14 @@ import re
 
 
 def _extract_json_payload(raw_text):
+    #if the response is already json 
     if isinstance(raw_text, (dict, list)):
         return raw_text
+    #if its not a string
     if not isinstance(raw_text, str):
         return None
 
+    #strip whitespace
     text = raw_text.strip()
     if not text:
         return None
@@ -20,7 +23,8 @@ def _extract_json_payload(raw_text):
     except json.JSONDecodeError:
         pass
 
-    # Common LLM format: prose with a fenced JSON block.
+    # Common LLM format: prose with a fenced JSON block. 
+    #sometimes the ai will put the json in a code block and give some stupid response like "hey here is the json you wanted with this completely irrelevent block to text just to make you wonder what the hell went wrong"
     fenced = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text, re.IGNORECASE)
     if fenced:
         candidate = fenced.group(1).strip()
@@ -32,6 +36,7 @@ def _extract_json_payload(raw_text):
     # Fallback: find the first decodable JSON value in the text.
     decoder = json.JSONDecoder()
     for i, ch in enumerate(text):
+        #if the response is not valid json
         if ch not in "[{":
             continue
         try:
@@ -43,6 +48,7 @@ def _extract_json_payload(raw_text):
     return None
 
 
+#the function that does the scoring 
 def scoreCall(extraction, search_text):
     """Generate scoring prompt from extraction and search text, call the
     scoring model, and return parsed JSON result.
@@ -54,14 +60,18 @@ def scoreCall(extraction, search_text):
         dict: parsed scoring verdict or error dict
     """
     print("🧠 Phase 3: Scoring and generating verdict...")
+    #Build the scoring prompt
     scoring_prompt = scorePrompt.build_scoring_prompt(extraction, search_text)
+    #call the groq api
     raw_verdict, err = aiCalls.call_groq(scoring_prompt)
+    #if groq fails
     if err:
+        #sometimes groq will fail so we fallback to gemini again pray that groq works
         print(f"⚠️ Groq failed ({err}), falling back to Gemini for scoring...")
         raw_verdict, err = aiCalls.call_gemini(scoring_prompt)
         if err:
             return f"RealityLens: Scoring failed — {err}"
-
+    
     result = _extract_json_payload(raw_verdict)
     if result is not None:
         return result

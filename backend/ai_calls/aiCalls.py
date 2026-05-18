@@ -9,21 +9,25 @@ import base64
 import backend.ai_calls.getKeys as getKeys
 
 
+# function to call groq vision ai
 def call_groq_vision(prompt, image_bytes):
     """Groq vision fallback for extraction when Gemini fails."""
+    # check if the groq api key is present
     if not getKeys.groq_api_key:
         return None, "GROQ_API_KEY is missing."
-
+    # encode image bytes to base64
     image_b64 = base64.b64encode(image_bytes).decode("utf-8")
-
+    # create a groq client
     groq_client = Groq(api_key=getKeys.groq_api_key)
-
-    # Only these Groq models support vision
+    # only these Groq models support vision
     vision_models = getKeys.vision_models
-
+    
+    # loop through vision models and try to extract information
     for model in vision_models:
+        # try to extract information
         try:
             print(f"🔍 Extracting with Groq vision {model}...")
+            # send the prompt and image to the groq vision api
             response = groq_client.chat.completions.create(
                 model=model,
                 messages=[
@@ -46,8 +50,9 @@ def call_groq_vision(prompt, image_bytes):
                 temperature=0.1,
                 max_tokens=1500,
             )
-
+            # get the raw response
             raw = response.choices[0].message.content.strip()
+            # clean up the response
             if raw.startswith("```json"):
                 raw = raw.replace("```json", "", 1).replace("```", "", 1).strip()
             elif raw.startswith("```"):
@@ -62,50 +67,59 @@ def call_groq_vision(prompt, image_bytes):
 
     return None, "All Groq vision models failed."
 
+# function to call gemini ai
 def call_gemini(prompt, image_part=None, gemini_api_keys=getKeys.gemini_api_keys, keys_to_try=None):
     """Try each key and model until one works. Returns parsed text or raises."""
+    
+    # if keys_to_try is None:
     if keys_to_try is None:
+        # copy the gemini api keys and shuffle them
         keys_to_try = gemini_api_keys[:]
         random.shuffle(keys_to_try)
-
+    # set max retries and max total seconds this is added because i noticed that sometimes gemini shows high traffic try again later
     MAX_RETRIES = 2
     MAX_TOTAL_SECONDS = 45
     start_time = time.time()
     last_error = "All API keys exhausted."
-
+    # loop through the keys
     i = 0
     while i < len(keys_to_try):
+        # get the current key i have specially made the keys to be randamized because it would first loop through all the exhausted ones first taking more time 
         key = keys_to_try[i]
         key_exhausted = False
-        
+        # loop through the models
         for model in getKeys.MODELS:
+            # loop through the retries
             for attempt in range(MAX_RETRIES):
+                # check if the time limit is reached
                 if time.time() - start_time > MAX_TOTAL_SECONDS:
                     return None, "Service timeout. Please try again."
-
                 try:
                     client = getKeys.get_gemini_client(key)
+                    # create the contents
                     contents = [prompt, image_part] if image_part else [prompt]
-
+                    # send the prompt and image to the gemini ai
                     response = client.models.generate_content(
                         model=model,
                         contents=contents,
                     )
-
+                    # check if the response is empty
                     if not response or not getattr(response, "text", None):
                         last_error = "Empty response from AI."
                         break
-
+                    # clean up the response
                     raw = response.text.strip()
+                    # remove markdown code blocks if present
                     if raw.startswith("```json"):
                         raw = raw.replace("```json", "", 1).replace("```", "", 1).strip()
                     elif raw.startswith("```"):
                         raw = raw.replace("```", "", 2).strip()
-
+                    # return the response
                     return raw, None
 
                 except Exception as e:
                     err = str(e)
+                    # handle 429 and RESOURCE_EXHAUSTED errors
                     if "429" in err or "RESOURCE_EXHAUSTED" in err:
                         print(f"⚠️ Quota exhausted on {model}, removing key and trying next...")
                         last_error = "Quota exhausted."
@@ -113,7 +127,8 @@ def call_gemini(prompt, image_part=None, gemini_api_keys=getKeys.gemini_api_keys
                         keys_to_try.pop(i)
                         key_exhausted = True
                         break
-                    elif "503" in err or "UNAVAILABLE" in err:
+                    elif "503" in err or "UNAVAILABLE" in err: 
+                        # handle 503 and UNAVAILABLE errors when model is overloaded
                         if attempt < MAX_RETRIES - 1:
                             wait = 5 * (attempt + 1)
                             print(f"⚠️ {model} overloaded, retrying in {wait}s...")
