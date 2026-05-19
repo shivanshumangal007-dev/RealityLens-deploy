@@ -13,7 +13,10 @@ import uuid
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from .models import Job
-from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Header, Depends, Response
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Header, Depends, Response, status
+from fastapi.security import OAuth2PasswordBearer
+import jwt
+from .auth import verify_password, create_access_token, ALGORITHM, SECRET_KEY
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.ai_calls import extractCall, searchCall, scoreCall
@@ -27,7 +30,10 @@ from .crud import (
     check_rate_limit,
     cleanup_stale_jobs,
     delete_old_rows,
+    create_user,
+    get_user,
 )
+from pydantic import BaseModel
 
 
 from fastapi import FastAPI
@@ -88,13 +94,13 @@ executor = ThreadPoolExecutor(max_workers=3)
 from .redisDatabase import redis_db
 
 
-async def rate_limit_using_redis(device_id: str) -> bool:
+async def rate_limit_using_redis(user_id: str) -> bool:
     MAX_REQUESTS = 60
     WINDOW_SECONDS = 60
 
     # We create a unique key for this specific user/device
     # Example key: "rate_limit:abc-123-device-id"
-    redis_key = f"rate_limit:{device_id}"
+    redis_key = f"rate_limit:{user_id}"
 
     # Get their current request count
     current_count = await redis_db.get(redis_key)
@@ -129,9 +135,31 @@ async def startup():
         except Exception as e:
             print("Migration error user_id:", e)
         try:
-            await conn.execute(text("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS username VARCHAR"))
+            await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR UNIQUE"))
         except Exception as e:
             print("Migration error username:", e)
+        try:
+            await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS password VARCHAR"))
+        except Exception as e:
+            print("Migration error password:", e)
+        # Drop NOT NULL on any leftover columns from old schema versions (e.g. device_id)
+        try:
+            known_columns = ("id", "created_at", "username", "password")
+            # Inline as SQL literals — PostgreSQL can't bind a tuple for NOT IN
+            not_in_list = ", ".join(f"'{c}'" for c in known_columns)
+            result = await conn.execute(text(f"""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name = 'users'
+                  AND table_schema = 'public'
+                  AND is_nullable = 'NO'
+                  AND column_name NOT IN ({not_in_list})
+            """))
+            for row in result:
+                col = row[0]
+                print(f"Migration: dropping NOT NULL on users.{col}")
+                await conn.execute(text(f'ALTER TABLE users ALTER COLUMN "{col}" DROP NOT NULL'))
+        except Exception as e:
+            print("Migration error dropping NOT NULL constraints:", e)
 
     
     async with AsyncSessionLocal() as db:
@@ -212,21 +240,38 @@ async def run_analysis(job_id: str, file_path: str):
                 os.remove(file_path)
 
 
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+
+async def get_current_user_id(token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            raise credentials_exception
+    except jwt.PyJWTError:
+        raise credentials_exception
+    return user_id
+
 # the api for submittimg the image
 @app.post("/submit")
 async def submit_endpoint(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    device_id: str = Header(...),
+    user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
     #first check if the device id is valid
-    allowed = await rate_limit_using_redis(device_id)
+    allowed = await rate_limit_using_redis(user_id)
     if not allowed:
         raise HTTPException(status_code=429, detail="Rate limit exceeded")
 
     #then save the job in the database    
-    job = await create_job(db, device_id=device_id, user_id=None)
+    job = await create_job(db, user_id=uuid.UUID(user_id))
     file_path = os.path.join(UPLOAD_DIR, f"{job.id}_{file.filename}")
 
     #saving the image 
@@ -239,21 +284,21 @@ async def submit_endpoint(
 
 # this is a simple api to get the status of a job
 @app.get("/status/{job_id}")
-async def status_endpoint(job_id: str, db: AsyncSession = Depends(get_db)):
+async def status_endpoint(job_id: str, user_id: str = Depends(get_current_user_id), db: AsyncSession = Depends(get_db)):
     #get the job from the database
     job = await get_job(db, uuid.UUID(job_id))
-    if not job:
+    if not job or str(job.user_id) != user_id:
         raise HTTPException(status_code=404, detail="Job not found")
     #return the status of the job
     return {"status": job.status}
 
 #this is an api to get the result of a job
 @app.get("/result/{job_id}")
-async def result_endpoint(job_id: str, db: AsyncSession = Depends(get_db)):
+async def result_endpoint(job_id: str, user_id: str = Depends(get_current_user_id), db: AsyncSession = Depends(get_db)):
     #get the job from the database
     job = await get_job(db, uuid.UUID(job_id))
     #if the job is not found
-    if not job:
+    if not job or str(job.user_id) != user_id:
         raise HTTPException(status_code=404, detail="Job not found")
     if job.status == "failed":
         raise HTTPException(status_code=500, detail=job.error)
@@ -263,10 +308,10 @@ async def result_endpoint(job_id: str, db: AsyncSession = Depends(get_db)):
 
 
 #this is an api to get the history of a job
-@app.get("/history/{device_id}")
-async def history_endpoint(device_id: str, db: AsyncSession = Depends(get_db)):
+@app.get("/history")
+async def history_endpoint(user_id: str = Depends(get_current_user_id), db: AsyncSession = Depends(get_db)):
     #get the job from the database
-    result = await db.execute(select(Job).filter(Job.device_id == device_id).order_by(Job.created_at.desc()))
+    result = await db.execute(select(Job).filter(Job.user_id == uuid.UUID(user_id)).order_by(Job.created_at.desc()))
     #return the history of the job
     history_list = [ {
             "id": str(job.id),
@@ -274,7 +319,7 @@ async def history_endpoint(device_id: str, db: AsyncSession = Depends(get_db)):
             "status": job.status,
             "result": job.result,
             "error": job.error,
-            "device_id": job.device_id
+            "user_id": str(job.user_id)
         } for job in result.scalars() ]
     return history_list
 
@@ -284,7 +329,26 @@ async def health_check():
     return {"status": "healthy"}
 
 
+class UserCredentials(BaseModel):
+    username: str
+    password: str
 
+@app.post("/register")
+async def register_user(credentials: UserCredentials, db: AsyncSession = Depends(get_db)):
+    user = await get_user(db, credentials.username)
+    if user:
+        raise HTTPException(status_code=400, detail="Username already exists")
+    user = await create_user(db, credentials.username, credentials.password)
+    access_token = create_access_token(data={"sub": str(user.id)})
+    return {"access_token": access_token, "token_type": "bearer", "user_id": str(user.id)}
+
+@app.post("/login")
+async def login_user(credentials: UserCredentials, db: AsyncSession = Depends(get_db)):
+    user = await get_user(db, credentials.username)
+    if not user or not verify_password(credentials.password, user.password):
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    access_token = create_access_token(data={"sub": str(user.id)})
+    return {"access_token": access_token, "token_type": "bearer", "user_id": str(user.id)}
 
 
 

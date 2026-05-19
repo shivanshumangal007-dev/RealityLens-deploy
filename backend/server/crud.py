@@ -11,9 +11,23 @@ RATE_LIMIT_MAX = 30
 RATE_LIMIT_WINDOW_HOURS = 1
 
 
-async def create_job(db: AsyncSession, device_id: str, user_id: uuid.UUID | None) -> Job:
-    username = getpass.getuser()
-    job = Job(user_id=user_id, device_id=device_id, username=username, status="pending")
+from .auth import get_password_hash
+
+async def create_user(db: AsyncSession, name: str, password: str) -> User:
+    user = User(username=name, password=get_password_hash(password))
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+async def get_user(db: AsyncSession, name: str) -> User | None:
+    result = await db.execute(select(User).where(User.username == name))
+    return result.scalar_one_or_none()
+
+
+
+async def create_job(db: AsyncSession, user_id: uuid.UUID) -> Job:
+    job = Job(user_id=user_id, status="pending")
     db.add(job)
     await db.commit()
     await db.refresh(job)
@@ -51,15 +65,15 @@ async def get_job(db: AsyncSession, job_id: uuid.UUID) -> Job | None:
     result = await db.execute(select(Job).where(Job.id == job_id))
     return result.scalar_one_or_none()
 
-async def check_rate_limit(db: AsyncSession, device_id: str) -> bool:
+async def check_rate_limit(db: AsyncSession, user_id: uuid.UUID) -> bool:
     now = datetime.now(timezone.utc)
     window_cutoff = now - timedelta(hours=RATE_LIMIT_WINDOW_HOURS)
 
     stmt = (
         insert(RateLimit)
-        .values(device_id=device_id, request_count=1, window_start=now)
+        .values(user_id=user_id, request_count=1, window_start=now)
         .on_conflict_do_update(
-            index_elements=["device_id"],
+            index_elements=["user_id"],
             set_={
                 "request_count": case(
                     (RateLimit.window_start < window_cutoff, 1),
