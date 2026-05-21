@@ -4,7 +4,18 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 from .database import Base
 import uuid
+import cloudinary
+import cloudinary.uploader
+import os
+from dotenv import load_dotenv
+load_dotenv()
 
+cloudinary.config(
+    cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
+    api_key=os.getenv("CLOUDINARY_API_KEY"),
+    api_secret=os.getenv("CLOUDINARY_API_SECRET"),
+    secure=True  # Forces HTTPS URLs
+)
 
 class User(Base):
     __tablename__ = "users"
@@ -25,7 +36,8 @@ class Job(Base):
     error: Mapped[str] = mapped_column(Text, nullable=True)
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     completed_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), nullable=True)
-    
+    image_url: Mapped[str] = mapped_column(String, nullable=True)
+    cloudinary_public_id: Mapped[str] = mapped_column(String, nullable=True)
     user: Mapped["User"] = relationship("User", back_populates="jobs")
 
 class RateLimit(Base):

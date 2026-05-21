@@ -4,7 +4,8 @@ import shutil
 import asyncio
 import sys
 from datetime import datetime, timezone, timedelta
-
+import cloudinary
+import cloudinary.uploader
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 from sqlalchemy import select, update, delete
@@ -68,19 +69,83 @@ async def lifespan(app: FastAPI):
     # Initialize the scheduler
     scheduler = AsyncIOScheduler()
     
-    # 2. Pass the function name WITHOUT calling it. No Depends() allowed here.
+    # Pass the function name WITHOUT calling it
     scheduler.add_job(delete_old_rows, 'cron', hour=0, minute=0)
     
     # Start the scheduler
     scheduler.start()
     
+    # Run Database Migrations
+    async with engine.connect() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+        await conn.commit()
+        
+        # Handle simple migrations for newly added columns safely
+        from sqlalchemy import text
+        
+        migration_queries = [
+            "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE SET NULL",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR UNIQUE",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS password VARCHAR",
+            "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS image_url VARCHAR",
+            "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS cloudinary_public_id VARCHAR"
+        ]
+        
+        for query in migration_queries:
+            try:
+                await conn.execute(text(query))
+                await conn.commit()
+            except Exception as e:
+                print(f"Migration error for query '{query}':", e)
+                await conn.rollback()
+        
+        # Drop NOT NULL on any leftover columns from old schema versions for both tables
+        try:
+            # Users table
+            known_user_columns = ("id", "created_at", "username", "password")
+            not_in_list = ", ".join(f"'{c}'" for c in known_user_columns)
+            result = await conn.execute(text(f"""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name = 'users'
+                  AND table_schema = 'public'
+                  AND is_nullable = 'NO'
+                  AND column_name NOT IN ({not_in_list})
+            """))
+            for row in result.fetchall():
+                col = row[0]
+                print(f"Migration: dropping NOT NULL on users.{col}")
+                await conn.execute(text(f'ALTER TABLE users ALTER COLUMN "{col}" DROP NOT NULL'))
+                
+            # Jobs table
+            known_job_columns = ("id", "status", "created_at")
+            not_in_list = ", ".join(f"'{c}'" for c in known_job_columns)
+            result = await conn.execute(text(f"""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name = 'jobs'
+                  AND table_schema = 'public'
+                  AND is_nullable = 'NO'
+                  AND column_name NOT IN ({not_in_list})
+            """))
+            for row in result.fetchall():
+                col = row[0]
+                print(f"Migration: dropping NOT NULL on jobs.{col}")
+                await conn.execute(text(f'ALTER TABLE jobs ALTER COLUMN "{col}" DROP NOT NULL'))
+                
+            await conn.commit()
+        except Exception as e:
+            print("Migration error dropping NOT NULL constraints:", e)
+            await conn.rollback()
+            
+    # Cleanup stale jobs
+    async with AsyncSessionLocal() as db:
+        await cleanup_stale_jobs(db)
+        
     yield
     
     # Shut down the scheduler cleanly when FastAPI stops
     scheduler.shutdown()
 
-
-app = FastAPI(title="RealityLens Backend")
+app = FastAPI(title="RealityLens Backend", lifespan=lifespan)
 
 #this is where the captured_img is stored
 UPLOAD_DIR = "temp_uploads"
@@ -122,52 +187,7 @@ async def rate_limit_using_redis(user_id: str) -> bool:
     return True
 
 # ── Startup ──────────────────────────────────────────────────────────────────
-
-
-@app.on_event("startup")
-async def startup():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-        # Handle simple migrations for newly added columns so any changes in the models doesnt crash the server
-        from sqlalchemy import text
-        try:
-            await conn.execute(text("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE SET NULL"))
-        except Exception as e:
-            print("Migration error user_id:", e)
-        try:
-            await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR UNIQUE"))
-        except Exception as e:
-            print("Migration error username:", e)
-        try:
-            await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS password VARCHAR"))
-        except Exception as e:
-            print("Migration error password:", e)
-        # Drop NOT NULL on any leftover columns from old schema versions (e.g. device_id)
-        try:
-            known_columns = ("id", "created_at", "username", "password")
-            # Inline as SQL literals — PostgreSQL can't bind a tuple for NOT IN
-            not_in_list = ", ".join(f"'{c}'" for c in known_columns)
-            result = await conn.execute(text(f"""
-                SELECT column_name FROM information_schema.columns
-                WHERE table_name = 'users'
-                  AND table_schema = 'public'
-                  AND is_nullable = 'NO'
-                  AND column_name NOT IN ({not_in_list})
-            """))
-            for row in result:
-                col = row[0]
-                print(f"Migration: dropping NOT NULL on users.{col}")
-                await conn.execute(text(f'ALTER TABLE users ALTER COLUMN "{col}" DROP NOT NULL'))
-        except Exception as e:
-            print("Migration error dropping NOT NULL constraints:", e)
-
-    
-    async with AsyncSessionLocal() as db:
-        await cleanup_stale_jobs(db)
-
-
-
-
+# Startup logic is now handled in the lifespan manager.
 # the main function for verification 
 def verify_content(image_path, on_status=None):
     # Phase 1: extraction
@@ -271,12 +291,21 @@ async def submit_endpoint(
         raise HTTPException(status_code=429, detail="Rate limit exceeded")
 
     #then save the job in the database    
-    job = await create_job(db, user_id=uuid.UUID(user_id))
+    import io
+
+    image_bytes = await file.read()
+    image_stream = io.BytesIO(image_bytes)
+    upload_result = cloudinary.uploader.upload(image_stream, folder="realitylens_uploads")   
+
+    secure_url = upload_result.get("secure_url")
+    public_id = upload_result.get("public_id")
+
+    job = await create_job(db, user_id=uuid.UUID(user_id), image_url=secure_url, cloudinary_public_id=public_id)
     file_path = os.path.join(UPLOAD_DIR, f"{job.id}_{file.filename}")
 
     #saving the image 
     with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+        buffer.write(image_bytes)
     #this is a background task, meaning it runs in the background and does not block the main thread
     background_tasks.add_task(run_analysis, str(job.id), file_path)
     #this is what we get when we submit the image
@@ -319,7 +348,8 @@ async def history_endpoint(user_id: str = Depends(get_current_user_id), db: Asyn
             "status": job.status,
             "result": job.result,
             "error": job.error,
-            "user_id": str(job.user_id)
+            "user_id": str(job.user_id),
+            "image_url": job.image_url,
         } for job in result.scalars() ]
     return history_list
 
@@ -397,8 +427,3 @@ async def login_user(credentials: UserCredentials, db: AsyncSession = Depends(ge
 #     finally:
 #         if websocket.client_state.name != "DISCONNECTED":
 #             await websocket.close()
-
-
-
-
-

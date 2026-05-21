@@ -26,8 +26,18 @@ async def get_user(db: AsyncSession, name: str) -> User | None:
 
 
 
-async def create_job(db: AsyncSession, user_id: uuid.UUID) -> Job:
-    job = Job(user_id=user_id, status="pending")
+async def create_job(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    image_url: str | None = None,
+    cloudinary_public_id: str | None = None,
+) -> Job:
+    job = Job(
+        user_id=user_id,
+        status="pending",
+        image_url=image_url,
+        cloudinary_public_id=cloudinary_public_id,
+    )
     db.add(job)
     await db.commit()
     await db.refresh(job)
