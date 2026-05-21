@@ -147,6 +147,22 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="RealityLens Backend", lifespan=lifespan)
 
+from fastapi.middleware.cors import CORSMiddleware
+origins = [
+    "http://localhost:3000", # Dev URL
+    "http://127.0.0.1:3000",
+    "localhost:5173"
+    # "*" can be used if your API is strictly local and not exposed to the web
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # Or specify the exact list above
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 #this is where the captured_img is stored
 UPLOAD_DIR = "temp_uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
