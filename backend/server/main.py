@@ -333,8 +333,11 @@ async def result_endpoint(job_id: str, user_id: str = Depends(get_current_user_i
         raise HTTPException(status_code=500, detail=job.error)
     if job.status not in ("done", "completed"):
         return Response(status_code=202)
-    return job.result
-
+    
+    result_data = job.result
+    if isinstance(result_data, dict):
+        result_data = {**result_data, "image_url": job.image_url}
+    return result_data
 
 #this is an api to get the history of a job
 @app.get("/history")
