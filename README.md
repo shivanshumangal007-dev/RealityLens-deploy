@@ -96,6 +96,10 @@ Distributable will be in `dist/` folder.
 
 - `WS /ws/job/{job_id}` - Subscribe to real-time job updates
 
+### Job ID Details
+
+- **`job_id`**: Returned by `POST /submit` when a new analysis job is created. The server generates this as a UUID (using `uuid.uuid4()`), so each job receives a unique identifier. This is a per-job identifier — it is not a server-wide constant. If you need a server-wide ID shared across jobs, add a separate field in the job model.
+
 ## Development
 
 ### Project Structure

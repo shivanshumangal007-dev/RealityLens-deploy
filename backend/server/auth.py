@@ -6,7 +6,7 @@ import hashlib
 
 SECRET_KEY = os.getenv("SECRET_KEY", "your-super-secret-key-change-this-in-production")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 30  # 30 days
 
 def _prepare_password(password: str) -> bytes:
     """Pre-hash with SHA-256 if >71 bytes so bcrypt never sees >72 bytes."""
