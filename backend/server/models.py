@@ -22,8 +22,9 @@ class User(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    email: Mapped[str] = mapped_column(String, unique = True, nullable=False)
     username: Mapped[str] = mapped_column(String, unique=True, nullable=False)
-    password: Mapped[str] = mapped_column(String, nullable=False)
+    password: Mapped[str] = mapped_column(String, nullable=True)
     jobs: Mapped[list["Job"]] = relationship("Job", back_populates="user")
 
 class Job(Base):

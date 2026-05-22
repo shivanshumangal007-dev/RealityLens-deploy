@@ -1,3 +1,4 @@
+from fastapi import Request
 import os
 import shutil
 
@@ -11,15 +12,16 @@ if sys.platform == "win32":
 from sqlalchemy import select, update, delete
 
 import uuid
-import asyncio
+import asyncio 
 from concurrent.futures import ThreadPoolExecutor
 from .models import Job
-from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Header, Depends, Response, status
+from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException, BackgroundTasks, Header, Depends, Response, status
 from fastapi.security import OAuth2PasswordBearer
 import jwt
 from .auth import verify_password, create_access_token, ALGORITHM, SECRET_KEY
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from fastapi.responses import RedirectResponse
+from authlib.integrations.starlette_client import OAuth, OAuthError
 from backend.ai_calls import extractCall, searchCall, scoreCall
 from .database import get_db, AsyncSessionLocal, engine, Base
 from .crud import (
@@ -33,6 +35,7 @@ from .crud import (
     delete_old_rows,
     create_user,
     get_user,
+    get_user_by_email,
 )
 from pydantic import BaseModel
 
@@ -87,6 +90,7 @@ async def lifespan(app: FastAPI):
             "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE SET NULL",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR UNIQUE",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS password VARCHAR",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR UNIQUE",
             "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS image_url VARCHAR",
             "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS cloudinary_public_id VARCHAR"
         ]
@@ -102,7 +106,7 @@ async def lifespan(app: FastAPI):
         # Drop NOT NULL on any leftover columns from old schema versions for both tables
         try:
             # Users table
-            known_user_columns = ("id", "created_at", "username", "password")
+            known_user_columns = ("id", "created_at", "username", "password", "email")
             not_in_list = ", ".join(f"'{c}'" for c in known_user_columns)
             result = await conn.execute(text(f"""
                 SELECT column_name FROM information_schema.columns
@@ -381,25 +385,120 @@ async def health_check():
 class UserCredentials(BaseModel):
     username: str
     password: str
+    email: str
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
 
 @app.post("/register")
 async def register_user(credentials: UserCredentials, db: AsyncSession = Depends(get_db)):
-    user = await get_user(db, credentials.username)
-    if user:
+    # 1. Check if username is taken
+    if await get_user(db, credentials.username):
         raise HTTPException(status_code=400, detail="Username already exists")
-    user = await create_user(db, credentials.username, credentials.password)
+    
+    # 2. Check if email is already registered
+    existing_user = await get_user_by_email(db, credentials.email)
+    if existing_user:
+        # If they exist but have no password, they previously registered via Google!
+        if existing_user.password is None:
+            raise HTTPException(
+                status_code=400, 
+                detail="An account with this email exists via Google Login. Please sign in with Google."
+            )
+        raise HTTPException(status_code=400, detail="Email already exists")
+        
+    # 3. Create a normal traditional user (with a hashed password)
+    user = await create_user(db, credentials.username, credentials.password, credentials.email)
+    
     access_token = create_access_token(data={"sub": str(user.id)})
     return {"access_token": access_token, "token_type": "bearer", "user_id": str(user.id)}
 
 @app.post("/login")
-async def login_user(credentials: UserCredentials, db: AsyncSession = Depends(get_db)):
-    user = await get_user(db, credentials.username)
+async def login_user(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
+    user = await get_user_by_email(db, credentials.email)
+    
+    # SECURITY SAFEGUARD: If a Google user tries to log in with an empty/blank 
+    # password form, explicitly reject them so verify_password never processes a Null DB value.
+    if user and user.password is None:
+        raise HTTPException(
+            status_code=400, 
+            detail="This account uses Google Login. Please sign in with Google."
+        )
+        
     if not user or not verify_password(credentials.password, user.password):
-        raise HTTPException(status_code=401, detail="Invalid username or password")
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+        
     access_token = create_access_token(data={"sub": str(user.id)})
     return {"access_token": access_token, "token_type": "bearer", "user_id": str(user.id)}
 
+router = APIRouter(tags=["Google Authentication"])
 
+oauth = OAuth()
+oauth.register(
+    name="google",
+    client_id=os.getenv("GOOGLE_CLIENT_ID"),
+    client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
+    server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+    client_kwargs={"scope": "openid email profile"},
+)
+
+
+@router.get("/login/google")
+async def google_login(request: Request):
+    """
+    Step A: Redirect user to Google sign-in.
+    """
+    redirect_uri = request.url_for("google_callback")
+    return await oauth.google.authorize_redirect(request, redirect_uri)
+
+
+@router.get("/auth/google/callback")
+async def google_callback(request: Request, db: AsyncSession = Depends(get_db)):
+    """
+    Step B: Handle Google payload, handle account linking, and pass user.id to JWT.
+    """
+    try:
+        token = await oauth.google.authorize_access_token(request)
+        user_info = token.get("userinfo")
+        if not user_info:
+            raise HTTPException(status_code=400, detail="Failed to retrieve Google user details.")
+    except OAuthError as error:
+        raise HTTPException(status_code=400, detail=f"OAuth Handshake Error: {error.error}")
+
+    email = user_info.get("email")
+    name = user_info.get("name")
+    
+    # 1. Look up user by email using your existing async function
+    user = await get_user_by_email(db, email)
+    
+    # 2. If the user doesn't exist, register them automatically
+    if not user:
+        # Generate a fallback username from their email if username is required in your DB
+        # e.g., "john.doe@gmail.com" becomes "john.doe"
+        if not name:
+            name = email.split("@")[0]
+
+        
+        # Call your existing create_user function. 
+        # Pass None or an empty string for password (ensure your DB model allows Null)
+        user = await create_user(
+            db=db, 
+            name=name, 
+            password=None, 
+            email=email
+        )
+
+    # 3. Use your EXACT JWT setup: encode stringified user ID into 'sub'
+    access_token = create_access_token(data={"sub": str(user.id)})
+
+    # 4. Redirect to Frontend or send JSON response
+    # For social logins, frontend routing via query parameters is standard practice:
+    frontend_url = f"http://localhost:3000/auth-callback?token={access_token}&user_id={user.id}"
+    return RedirectResponse(url=frontend_url)
+
+app.include_router(router)
 
 # from fastapi import WebSocket, WebSocketDisconnect
 # from sqlalchemy import select
