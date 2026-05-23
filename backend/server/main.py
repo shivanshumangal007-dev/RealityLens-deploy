@@ -245,20 +245,20 @@ def verify_content(image_path, on_status=None):
 
 
 # changing the status in the database for a job after the analysis
-def make_status_callback(job_id: str):
-    """Returns a callable that writes status updates to the db synchronously."""
+def make_status_callback(job_id: str, main_loop: asyncio.AbstractEventLoop):
+    """Returns a callable that writes status updates to the db asynchronously without blocking the AI thread."""
 
     def callback(message: str):
         async def _update():
-            async with AsyncSessionLocal() as db:
-                await update_job_status(db, uuid.UUID(job_id), message)
+            try:
+                async with AsyncSessionLocal() as db:
+                    await update_job_status(db, uuid.UUID(job_id), message)
+            except Exception as e:
+                print(f"Status update failed for {job_id}: {e}")
 
-        # we need to create a new event loop because we are not in an async function
-        loop = asyncio.new_event_loop()
-        try:
-            loop.run_until_complete(_update())
-        finally:
-            loop.close()
+        # Send the DB update to the main event loop and return immediately
+        asyncio.run_coroutine_threadsafe(_update(), main_loop)
+        
     return callback
 
 # this is the function that runs the verify_content function
@@ -283,7 +283,7 @@ async def run_analysis(job_id: str, file_path: str):
                 executor,
                 verify_content,
                 file_path,
-                make_status_callback(job_id),
+                make_status_callback(job_id, loop),
             )
             
             # Run both in parallel
