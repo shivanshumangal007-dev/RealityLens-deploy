@@ -24,6 +24,10 @@ async def get_user(db: AsyncSession, name: str) -> User | None:
     result = await db.execute(select(User).where(User.username == name))
     return result.scalar_one_or_none()
 
+async def get_user_from_userid(db:AsyncSession, userid: uuid.UUID) ->User| None:
+    result = await db.execute(select(User).where(User.id == userid))
+    return result.scalar_one_or_none()
+
 async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
     result = await db.execute(select(User).where(User.email == email))
     return result.scalar_one_or_none()

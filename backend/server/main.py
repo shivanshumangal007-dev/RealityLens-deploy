@@ -35,6 +35,7 @@ from .crud import (
     delete_old_rows,
     create_user,
     get_user,
+    get_user_from_userid,
     get_user_by_email,
 )
 from pydantic import BaseModel
@@ -432,6 +433,17 @@ async def login_user(credentials: UserLogin, db: AsyncSession = Depends(get_db))
         
     access_token = create_access_token(data={"sub": str(user.id)})
     return {"access_token": access_token, "token_type": "bearer", "user_id": str(user.id)}
+
+@app.get("/me")
+async def get_user_details(user_id: str = Depends(get_current_user_id), db: AsyncSession = Depends(get_db)):
+    user = await get_user_from_userid(db, uuid.UUID(user_id))
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {
+        "username": user.username,
+        "email": user.email
+    }
+
 
 router = APIRouter(tags=["Google Authentication"])
 
