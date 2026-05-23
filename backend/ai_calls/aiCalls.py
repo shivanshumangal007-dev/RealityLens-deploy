@@ -3,14 +3,16 @@ import time
 import requests
 import os
 import random
-from groq import Groq
-from tavily import TavilyClient
+from groq import AsyncGroq
+from tavily import AsyncTavilyClient
+import httpx
+import asyncio
 import base64
 import backend.ai_calls.getKeys as getKeys
 
 
 # function to call groq vision ai
-def call_groq_vision(prompt, image_bytes):
+async def call_groq_vision(prompt, image_bytes):
     """Groq vision fallback for extraction when Gemini fails."""
     # check if the groq api key is present
     if not getKeys.groq_api_key:
@@ -18,7 +20,7 @@ def call_groq_vision(prompt, image_bytes):
     # encode image bytes to base64
     image_b64 = base64.b64encode(image_bytes).decode("utf-8")
     # create a groq client
-    groq_client = Groq(api_key=getKeys.groq_api_key)
+    groq_client = AsyncGroq(api_key=getKeys.groq_api_key)
     # only these Groq models support vision
     vision_models = getKeys.vision_models
     
@@ -28,7 +30,7 @@ def call_groq_vision(prompt, image_bytes):
         try:
             print(f"🔍 Extracting with Groq vision {model}...")
             # send the prompt and image to the groq vision api
-            response = groq_client.chat.completions.create(
+            response = await groq_client.chat.completions.create(
                 model=model,
                 messages=[
                     {
@@ -68,7 +70,7 @@ def call_groq_vision(prompt, image_bytes):
     return None, "All Groq vision models failed."
 
 # function to call gemini ai
-def call_gemini(prompt, image_part=None, gemini_api_keys=getKeys.gemini_api_keys, keys_to_try=None):
+async def call_gemini(prompt, image_part=None, gemini_api_keys=getKeys.gemini_api_keys, keys_to_try=None):
     """Try each key and model until one works. Returns parsed text or raises."""
     
     # if keys_to_try is None:
@@ -99,7 +101,7 @@ def call_gemini(prompt, image_part=None, gemini_api_keys=getKeys.gemini_api_keys
                     # create the contents
                     contents = [prompt, image_part] if image_part else [prompt]
                     # send the prompt and image to the gemini ai
-                    response = client.models.generate_content(
+                    response = await client.aio.models.generate_content(
                         model=model,
                         contents=contents,
                     )
@@ -132,7 +134,7 @@ def call_gemini(prompt, image_part=None, gemini_api_keys=getKeys.gemini_api_keys
                         if attempt < MAX_RETRIES - 1:
                             wait = 5 * (attempt + 1)
                             print(f"⚠️ {model} overloaded, retrying in {wait}s...")
-                            time.sleep(wait)
+                            await asyncio.sleep(wait)
                         else:
                             print(f"⚠️ {model} still failing, next model...")
                             last_error = f"{model} unavailable."
@@ -150,7 +152,7 @@ def call_gemini(prompt, image_part=None, gemini_api_keys=getKeys.gemini_api_keys
 
     return None, last_error
 
-def call_kimi(prompt, image_bytes=None):
+async def call_kimi(prompt, image_bytes=None):
 
     ACCOUNT_ID = os.getenv("ACCOUNT_ID", "").strip()
     AUTH_TOKEN = os.getenv("CLOUDFLARE_AUTH_TOKEN", "").strip()
@@ -172,11 +174,12 @@ def call_kimi(prompt, image_bytes=None):
         })
 
     try:
-        response = requests.post(
-            url,
-            headers=headers,
-            json={"messages": [{"role": "user", "content": content}]}
-        )
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                url,
+                headers=headers,
+                json={"messages": [{"role": "user", "content": content}]}
+            )
         
         # Check for Cloudflare success
         res_json = response.json()
@@ -196,17 +199,17 @@ def call_kimi(prompt, image_bytes=None):
     except Exception as e:
         return None, f"Kimi-K2 Connection Error: {str(e)}"
     
-def call_groq(prompt):
+async def call_groq(prompt):
     """Call Groq API with the given prompt. Returns response text or raises."""
     if not getKeys.groq_api_key:
         raise ValueError("GROQ_API_KEY is missing.")
     
 
-    client = Groq(api_key=getKeys.groq_api_key)
+    client = AsyncGroq(api_key=getKeys.groq_api_key)
     for model in getKeys.GROQ_MODELS:
         try:
             print(f"🤖 Scoring with Groq {model}...")
-            response = client.chat.completions.create(
+            response = await client.chat.completions.create(
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.1,  # Low temp for consistent structured output
@@ -232,16 +235,16 @@ def call_groq(prompt):
 
     return None, "All Groq models failed."
 
-def tavily_search(query, num_results=5):
+async def tavily_search(query, num_results=5):
     """Search using Tavily API. Returns list of result dicts."""
     if not getKeys.tavily_api_key:
         print("⚠️ No Tavily API key found, skipping search.")
         return []
 
     try:
-        client = TavilyClient(api_key=getKeys.tavily_api_key)
+        client = AsyncTavilyClient(api_key=getKeys.tavily_api_key)
 
-        response = client.search(
+        response = await client.search(
             query=query,
             max_results=num_results,
             search_depth="basic",  # use "advanced" for better results but costs 2 credits
@@ -273,30 +276,31 @@ def tavily_search(query, num_results=5):
         print(f"⚠️ Tavily search failed: {e}")
         return []
 
-def parallel_search(query, num_results=5):
+async def parallel_search(query, num_results=5):
     parallel_key = os.getenv("PARALLEL_API_KEY", "").strip()
     if not parallel_key:
         print("⚠️ No Parallel API key found, skipping search.")
         return []
 
     try:
-        response = requests.post(
-            "https://api.parallel.ai/v1beta/search",
-            headers={
-                "Content-Type": "application/json",
-                "x-api-key": parallel_key,
-            },
-            json={
-                "objective": f"Find credible news sources that confirm or deny this claim: {query}",
-                "search_queries": [query],
-                "mode": "fast",        # fast = <5s, quality = better but slower
-                "max_results": num_results,
-                "excerpts": {
-                    "max_chars_per_result": 1500  # enough context for scoring
-                }
-            },
-            timeout=15,
-        )
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://api.parallel.ai/v1beta/search",
+                headers={
+                    "Content-Type": "application/json",
+                    "x-api-key": parallel_key,
+                },
+                json={
+                    "objective": f"Find credible news sources that confirm or deny this claim: {query}",
+                    "search_queries": [query],
+                    "mode": "fast",        # fast = <5s, quality = better but slower
+                    "max_results": num_results,
+                    "excerpts": {
+                        "max_chars_per_result": 1500  # enough context for scoring
+                    }
+                },
+                timeout=15.0,
+            )
         response.raise_for_status()
         data = response.json()
 

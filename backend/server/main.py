@@ -212,15 +212,20 @@ async def rate_limit_using_redis(user_id: str) -> bool:
 # ── Startup ──────────────────────────────────────────────────────────────────
 # Startup logic is now handled in the lifespan manager.
 # the main function for verification 
-def verify_content(image_path, on_status=None):
-    # Phase 1: extraction
+async def verify_content(image_path, on_status=None):
+    start_time = time.time()
+    print(f"⏱️ Initiation started at: {time.strftime('%H:%M:%S', time.localtime(start_time))}")
     
-    def status(msg):
+    async def status(msg):
         if on_status:
-            on_status(msg)
+            await on_status(msg)
 
-    status("Extracting information from screenshot...")
-    extraction = extractCall.extractionCall(image_path)
+    # Phase 1: extraction
+    ext_start = time.time()
+    await status("Extracting information from screenshot...")
+    extraction = await extractCall.extractionCall(image_path)
+    ext_end = time.time()
+    print(f"⏱️ Extraction time: {ext_end - ext_start:.2f}s")
     
     print(extraction)
     # extractionCall returns either a dict or an error string/dict
@@ -234,31 +239,35 @@ def verify_content(image_path, on_status=None):
         return extraction
     
     # Phase 2: search
-    status("Searching for relevant information...")
-    search_text = searchCall.searchCall(extraction)
+    search_start = time.time()
+    await status("Searching for relevant information...")
+    search_text = await searchCall.searchCall(extraction)
+    search_end = time.time()
+    print(f"⏱️ Searching time: {search_end - search_start:.2f}s")
 
     # Phase 3: scoring
-    status("Scoring and generating verdict...")
-    result = scoreCall.scoreCall(extraction, search_text)
-    status("Analysis complete.")
+    score_start = time.time()
+    await status("Scoring and generating verdict...")
+    result = await scoreCall.scoreCall(extraction, search_text)
+    score_end = time.time()
+    print(f"⏱️ Scoring time: {score_end - score_start:.2f}s")
+    
+    print(f"⏱️ Total verification time: {score_end - start_time:.2f}s")
+    await status("Analysis complete.")
     return result
 
 
 # changing the status in the database for a job after the analysis
-def make_status_callback(job_id: str, main_loop: asyncio.AbstractEventLoop):
-    """Returns a callable that writes status updates to the db asynchronously without blocking the AI thread."""
+def make_status_callback(job_id: str):
+    """Returns an async callable that writes status updates to the db."""
 
-    def callback(message: str):
-        async def _update():
-            try:
-                async with AsyncSessionLocal() as db:
-                    await update_job_status(db, uuid.UUID(job_id), message)
-            except Exception as e:
-                print(f"Status update failed for {job_id}: {e}")
-
-        # Send the DB update to the main event loop and return immediately
-        asyncio.run_coroutine_threadsafe(_update(), main_loop)
-        
+    async def callback(message: str):
+        try:
+            async with AsyncSessionLocal() as db:
+                await update_job_status(db, uuid.UUID(job_id), message)
+        except Exception as e:
+            print(f"Status update failed for {job_id}: {e}")
+            
     return callback
 
 # this is the function that runs the verify_content function
@@ -278,12 +287,10 @@ async def run_analysis(job_id: str, file_path: str):
 
             # Run upload on default executor (IO-bound)
             upload_task = loop.run_in_executor(None, do_upload)
-            # Run analysis on the bounded executor
-            analysis_task = loop.run_in_executor(
-                executor,
-                verify_content,
+            # Run analysis directly since it's async now
+            analysis_task = verify_content(
                 file_path,
-                make_status_callback(job_id, loop),
+                make_status_callback(job_id),
             )
             
             # Run both in parallel

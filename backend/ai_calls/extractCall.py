@@ -8,7 +8,7 @@ from . import aiCalls
 from ..prompts import extractionPrompt
 
 #function to extract the relevant information from given image
-def extractionCall(image_path):
+async def extractionCall(image_path):
 
     #resizing image
     try:
@@ -32,11 +32,11 @@ def extractionCall(image_path):
     # ── Phase 1: Extract claim from screenshot ───────────────────────────────
     #calling groq or gemini vision
     print("🔍 Phase 1: Extracting claim from screenshot...")
-    raw_extraction, err = aiCalls.call_groq_vision(extractionPrompt.EXTRACTION_PROMPT, img_bytes)
+    raw_extraction, err = await aiCalls.call_groq_vision(extractionPrompt.EXTRACTION_PROMPT, img_bytes)
     #if groq fails, try gemini vision but gemini is trash so pray that groq works
     if err:
         print(f"⚠️ Groq failed ({err}), trying Gemini vision...")
-        raw_extraction, err = aiCalls.call_gemini(extractionPrompt.EXTRACTION_PROMPT, image_part, keys_to_try=keys_to_try)
+        raw_extraction, err = await aiCalls.call_gemini(extractionPrompt.EXTRACTION_PROMPT, image_part, keys_to_try=keys_to_try)
         if err:
             return f"RealityLens: Extraction failed — {err}"
     #parsing the response

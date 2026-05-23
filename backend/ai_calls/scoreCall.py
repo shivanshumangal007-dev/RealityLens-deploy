@@ -49,7 +49,7 @@ def _extract_json_payload(raw_text):
 
 
 #the function that does the scoring 
-def scoreCall(extraction, search_text):
+async def scoreCall(extraction, search_text):
     """Generate scoring prompt from extraction and search text, call the
     scoring model, and return parsed JSON result.
 
@@ -63,12 +63,12 @@ def scoreCall(extraction, search_text):
     #Build the scoring prompt
     scoring_prompt = scorePrompt.build_scoring_prompt(extraction, search_text)
     #call the groq api
-    raw_verdict, err = aiCalls.call_groq(scoring_prompt)
+    raw_verdict, err = await aiCalls.call_groq(scoring_prompt)
     #if groq fails
     if err:
         #sometimes groq will fail so we fallback to gemini again pray that groq works
         print(f"⚠️ Groq failed ({err}), falling back to Gemini for scoring...")
-        raw_verdict, err = aiCalls.call_gemini(scoring_prompt)
+        raw_verdict, err = await aiCalls.call_gemini(scoring_prompt)
         if err:
             return f"RealityLens: Scoring failed — {err}"
     
