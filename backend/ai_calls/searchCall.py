@@ -38,10 +38,10 @@ def searchCall(extraction):
         if extraction.get("has_embedded_image") and extraction.get("image_description"):
             print("🖼️ Searching for image origin...")
             try:
-                return aiCalls.parallel_search(extraction["image_description"], num_results=3)
+                return aiCalls.tavily_search(extraction["image_description"], num_results=3)
             except Exception as e:
                 print(f"⚠️ Image search error: {e}")
-                return aiCalls.tavily_search(extraction["image_description"], num_results=3)
+                return aiCalls.parallel_search(extraction["image_description"], num_results=3)
         return []
     #run both text and image search in parallel to make the fastest step in the process even faster (idk)
     with concurrent.futures.ThreadPoolExecutor() as executor:
