@@ -57,23 +57,25 @@ async def update_job_status(db: AsyncSession, job_id: uuid.UUID, status: dict):
     )
     await db.commit()
 
-async def complete_job(db: AsyncSession, job_id: uuid.UUID, result: dict):
+async def complete_job(db: AsyncSession, job_id: uuid.UUID, result: dict, time_taken: float | None = None):
     await db.execute(
         update(Job).where(Job.id == job_id).values(
             status="done",
             result=result,
-            completed_at=datetime.now(timezone.utc)
+            completed_at=datetime.now(timezone.utc),
+            time_taken=time_taken
         )
     )
     await db.commit()
     await db.close()
 
-async def fail_job(db: AsyncSession, job_id: uuid.UUID, error_message: str):
+async def fail_job(db: AsyncSession, job_id: uuid.UUID, error_message: str, time_taken: float | None = None):
     await db.execute(
         update(Job).where(Job.id == job_id).values(
             status="failed",
             error=error_message,
-            completed_at=datetime.now(timezone.utc)
+            completed_at=datetime.now(timezone.utc),
+            time_taken=time_taken
         )
     )
     await db.commit()

@@ -1,3 +1,4 @@
+from sqlalchemy import Float
 from sqlalchemy import String, Integer, DateTime, ForeignKey, Text
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -37,6 +38,7 @@ class Job(Base):
     error: Mapped[str] = mapped_column(Text, nullable=True)
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     completed_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), nullable=True)
+    time_taken: Mapped[float] = mapped_column(Float, nullable=True)
     image_url: Mapped[str] = mapped_column(String, nullable=True)
     cloudinary_public_id: Mapped[str] = mapped_column(String, nullable=True)
     user: Mapped["User"] = relationship("User", back_populates="jobs")

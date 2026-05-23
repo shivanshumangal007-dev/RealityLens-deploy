@@ -4,6 +4,7 @@ import shutil
 
 import asyncio
 import sys
+import time
 from datetime import datetime, timezone, timedelta
 import cloudinary
 import cloudinary.uploader
@@ -93,7 +94,8 @@ async def lifespan(app: FastAPI):
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS password VARCHAR",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR UNIQUE",
             "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS image_url VARCHAR",
-            "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS cloudinary_public_id VARCHAR"
+            "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS cloudinary_public_id VARCHAR",
+            "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS time_taken DOUBLE PRECISION"
         ]
         
         for query in migration_queries:
@@ -261,21 +263,51 @@ def make_status_callback(job_id: str):
 
 # this is the function that runs the verify_content function
 async def run_analysis(job_id: str, file_path: str):
+    start_time = time.time()
     async with AsyncSessionLocal() as db:
         try:
             loop = asyncio.get_event_loop()
-            # run_in_executor runs the function in a separate thread, this thread runs the verify_content
-            result = await loop.run_in_executor(
+            
+            # Helper to upload to Cloudinary in a background thread
+            def do_upload():
+                with open(file_path, "rb") as f:
+                    image_bytes = f.read()
+                import io
+                image_stream = io.BytesIO(image_bytes)
+                return cloudinary.uploader.upload(image_stream, folder="realitylens_uploads")
+
+            # Run upload on default executor (IO-bound)
+            upload_task = loop.run_in_executor(None, do_upload)
+            # Run analysis on the bounded executor
+            analysis_task = loop.run_in_executor(
                 executor,
                 verify_content,
                 file_path,
                 make_status_callback(job_id),
             )
+            
+            # Run both in parallel
+            upload_result, result = await asyncio.gather(upload_task, analysis_task)
+            
+            secure_url = upload_result.get("secure_url")
+            public_id = upload_result.get("public_id")
+            
+            # Update job with the Cloudinary image URL
+            await db.execute(
+                update(Job).where(Job.id == uuid.UUID(job_id)).values(
+                    image_url=secure_url,
+                    cloudinary_public_id=public_id,
+                )
+            )
+            await db.commit()
+            
+            time_taken = time.time() - start_time
             #this basically makes the changes in the database
-            await complete_job(db, uuid.UUID(job_id), result)
+            await complete_job(db, uuid.UUID(job_id), result, time_taken=time_taken)
         except Exception as e:
             print(f"❌ run_analysis failed for job {job_id}: {e}")  # add this
-            await fail_job(db, uuid.UUID(job_id), str(e))
+            time_taken = time.time() - start_time
+            await fail_job(db, uuid.UUID(job_id), str(e), time_taken=time_taken)
         finally:
             if os.path.exists(file_path):
                 os.remove(file_path)
@@ -311,22 +343,16 @@ async def submit_endpoint(
     if not allowed:
         raise HTTPException(status_code=429, detail="Rate limit exceeded")
 
-    #then save the job in the database    
-    import io
-
     image_bytes = await file.read()
-    image_stream = io.BytesIO(image_bytes)
-    upload_result = cloudinary.uploader.upload(image_stream, folder="realitylens_uploads")   
 
-    secure_url = upload_result.get("secure_url")
-    public_id = upload_result.get("public_id")
-
-    job = await create_job(db, user_id=uuid.UUID(user_id), image_url=secure_url, cloudinary_public_id=public_id)
+    # Save the job initially without the Cloudinary URL (it will be updated in background)
+    job = await create_job(db, user_id=uuid.UUID(user_id))
     file_path = os.path.join(UPLOAD_DIR, f"{job.id}_{file.filename}")
 
     #saving the image 
     with open(file_path, "wb") as buffer:
         buffer.write(image_bytes)
+        
     #this is a background task, meaning it runs in the background and does not block the main thread
     background_tasks.add_task(run_analysis, str(job.id), file_path)
     #this is what we get when we submit the image
@@ -357,7 +383,7 @@ async def result_endpoint(job_id: str, user_id: str = Depends(get_current_user_i
     
     result_data = job.result
     if isinstance(result_data, dict):
-        result_data = {**result_data, "image_url": job.image_url}
+        result_data = {**result_data, "image_url": job.image_url, "time_taken": job.time_taken}
     return result_data
 
 #this is an api to get the history of a job
@@ -369,11 +395,13 @@ async def history_endpoint(user_id: str = Depends(get_current_user_id), db: Asyn
     history_list = [ {
             "id": str(job.id),
             "created_at": job.created_at,
+            "completed_at": job.completed_at,
             "status": job.status,
             "result": job.result,
             "error": job.error,
             "user_id": str(job.user_id),
             "image_url": job.image_url,
+            "time_taken": job.time_taken,
         } for job in result.scalars() ]
     return history_list
 
