@@ -17,8 +17,8 @@ async def searchCall(extraction):
     claim = extraction.get("claim", "")
     print(f"🌐 Phase 2: Searching for — {claim}")
     entities = extraction.get("claim_entities", claim)
-    #set the search query 
-    search_query = entities if entities else claim
+    # Combine claim and entities to ensure critical context isn't lost if the vision model omits it
+    search_query = f"{claim} {entities}" if entities and entities != claim else claim
 
     async def do_text_search():
         #call tavily search or parallel search if tavily fails
