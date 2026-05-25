@@ -29,8 +29,6 @@ groq_api_key = os.getenv("GROQ_API_KEY", "").strip()
 #groq models to try
 GROQ_MODELS = [
     "llama-3.3-70b-versatile",        # Best quality, large context
-    "moonshotai/kimi-k2-instruct",    # Strong reasoning, huge context
-    "qwen/qwen3-32b",                 # Good at structured JSON output
     "meta-llama/llama-4-scout-17b-16e-instruct",  # Fast fallback
     "llama-3.1-8b-instant",           # Last resort, very fast
 ]

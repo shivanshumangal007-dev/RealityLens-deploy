@@ -206,32 +206,40 @@ async def call_groq(prompt):
     
 
     client = AsyncGroq(api_key=getKeys.groq_api_key)
+    MAX_RETRIES = 2
     for model in getKeys.GROQ_MODELS:
-        try:
-            print(f"🤖 Scoring with Groq {model}...")
-            response = await client.chat.completions.create(
-                model=model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.1,  # Low temp for consistent structured output
-                max_tokens=1500,
-            )
+        for attempt in range(MAX_RETRIES):
+            try:
+                print(f"🤖 Scoring with Groq {model}...")
+                response = await client.chat.completions.create(
+                    model=model,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.1,  # Low temp for consistent structured output
+                    max_tokens=1500,
+                )
 
-            raw = response.choices[0].message.content.strip()
-            if raw.startswith("```json"):
-                raw = raw.replace("```json", "", 1).replace("```", "", 1).strip()
-            elif raw.startswith("```"):
-                raw = raw.replace("```", "", 2).strip()
+                raw = response.choices[0].message.content.strip()
+                if raw.startswith("```json"):
+                    raw = raw.replace("```json", "", 1).replace("```", "", 1).strip()
+                elif raw.startswith("```"):
+                    raw = raw.replace("```", "", 2).strip()
 
-            return raw, None
+                return raw, None
 
-        except Exception as e:
-            err = str(e)
-            if "429" in err or "rate_limit" in err.lower():
-                print(f"⚠️ Groq rate limit on {model}, trying next...")
-                continue
-            else:
-                print(f"⚠️ Groq error on {model}: {err}")
-                continue
+            except Exception as e:
+                err = str(e)
+                if "429" in err or "rate_limit" in err.lower():
+                    if attempt < MAX_RETRIES - 1:
+                        wait = 5 * (attempt + 1)
+                        print(f"⚠️ Groq rate limit on {model}, retrying in {wait}s...")
+                        await asyncio.sleep(wait)
+                        continue
+                    else:
+                        print(f"⚠️ Groq rate limit on {model} persists, trying next...")
+                        break
+                else:
+                    print(f"⚠️ Groq error on {model}: {err}")
+                    break
 
     return None, "All Groq models failed."
 
