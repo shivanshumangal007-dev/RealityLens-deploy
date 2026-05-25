@@ -343,7 +343,7 @@ def format_search_results(results):
         date = f" ({r.get('publish_date', 'date unknown')})" if r.get('publish_date') else ""
         lines.append(f"{i}. {r['source']}{date}: {r['title']}")
         lines.append(f"   URL: {r['url']}")
-        desc = (r['description'] or '')[:200]
+        desc = (r['description'] or '')[:500]
         lines.append(f"   Summary: {desc}")
         lines.append("")
     return "\n".join(lines)
