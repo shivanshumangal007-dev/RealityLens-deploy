@@ -1,6 +1,6 @@
+from backend.prompts.scorePrompt import SCORING_SYSTEM_PROMPT
 import os
 import time
-import requests
 import os
 import random
 from groq import AsyncGroq
@@ -213,7 +213,10 @@ async def call_groq(prompt):
                 print(f"🤖 Scoring with Groq {model}...")
                 response = await client.chat.completions.create(
                     model=model,
-                    messages=[{"role": "user", "content": prompt}],
+                        messages=[
+                            {"role": "system", "content": SCORING_SYSTEM_PROMPT},
+                            {"role": "user", "content": prompt}
+                        ],
                     temperature=0.1,  # Low temp for consistent structured output
                     max_tokens=1500,
                 )
@@ -340,6 +343,7 @@ def format_search_results(results):
         date = f" ({r.get('publish_date', 'date unknown')})" if r.get('publish_date') else ""
         lines.append(f"{i}. {r['source']}{date}: {r['title']}")
         lines.append(f"   URL: {r['url']}")
-        lines.append(f"   Summary: {r['description']}")
+        desc = (r['description'] or '')[:200]
+        lines.append(f"   Summary: {desc}")
         lines.append("")
     return "\n".join(lines)
