@@ -1,6 +1,6 @@
 from sqlalchemy import Float
-from sqlalchemy import String, Integer, DateTime, ForeignKey, Text
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy import String, Integer, DateTime, ForeignKey, Text, JSON, UUID
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 from .database import Base
@@ -34,7 +34,7 @@ class Job(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     status: Mapped[str] = mapped_column(String, nullable=False, default="pending")
-    result: Mapped[dict] = mapped_column(JSONB, nullable=True)
+    result: Mapped[dict] = mapped_column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
     error: Mapped[str] = mapped_column(Text, nullable=True)
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     completed_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), nullable=True)
