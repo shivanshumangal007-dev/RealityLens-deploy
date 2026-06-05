@@ -131,3 +131,43 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)):
     access_token = create_access_token(data={"sub": str(user.id)})
     frontend_url = f"http://localhost:3000/auth-callback?token={access_token}&user_id={user.id}"
     return RedirectResponse(url=frontend_url)
+
+# ── Frontend Token Validation (React SDK) ─────────────────────────────────────
+
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+
+class GoogleTokenPayload(BaseModel):
+    id_token: str
+
+@router.post("/auth/google", tags=["Google Authentication"])
+async def verify_google_token(payload: GoogleTokenPayload, db: AsyncSession = Depends(get_db)):
+    """Handle id_token sent directly from the frontend React app."""
+    try:
+        # Verify the token with Google
+        id_info = id_token.verify_oauth2_token(
+            payload.id_token,
+            google_requests.Request(),
+            os.getenv("GOOGLE_CLIENT_ID")
+        )
+        
+        email = id_info.get("email")
+        name = id_info.get("name")
+        
+        if not email:
+            raise HTTPException(status_code=400, detail="No email provided by Google")
+
+        # Find or create user
+        user = await get_user_by_email(db, email)
+        if not user:
+            if not name:
+                name = email.split("@")[0]
+            user = await create_user(db=db, username=name, password=None, email=email)
+            
+        # Generate our own JWT access token
+        access_token = create_access_token(data={"sub": str(user.id)})
+        return {"access_token": access_token, "token_type": "bearer", "user_id": str(user.id)}
+        
+    except ValueError:
+        # Invalid token
+        raise HTTPException(status_code=401, detail="Invalid Google token")
