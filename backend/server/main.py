@@ -124,6 +124,14 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="RealityLens Backend", lifespan=lifespan)
 
+from starlette.middleware.sessions import SessionMiddleware
+import os
+
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=os.getenv("SECRET_KEY", "realitylens-super-secret-key")
+)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
