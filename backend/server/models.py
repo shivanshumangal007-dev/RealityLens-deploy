@@ -40,7 +40,7 @@ class Job(Base):
     completed_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), nullable=True)
     time_taken: Mapped[float] = mapped_column(Float, nullable=True)
     image_url: Mapped[str] = mapped_column(String, nullable=True)
-    cloudinary_public_id: Mapped[str] = mapped_column(String, nullable=True)
+    cloudinary_public_id: Mapped[str] = mapped_column(String, nullable=True) 
     user: Mapped["User"] = relationship("User", back_populates="jobs")
 
 class RateLimit(Base):

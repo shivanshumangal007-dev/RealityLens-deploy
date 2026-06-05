@@ -4,7 +4,7 @@ import jwt
 import os
 import hashlib
 
-SECRET_KEY = os.getenv("SECRET_KEY", "your-super-secret-key-change-this-in-production")
+SECRET_KEY = os.getenv("SECRET_KEY", "your-super-secret-key-change-this-as-you-will")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 30  # 30 days
 

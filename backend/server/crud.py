@@ -13,8 +13,8 @@ RATE_LIMIT_WINDOW_HOURS = 1
 
 from .auth import get_password_hash
 
-async def create_user(db: AsyncSession, name: str, password: str, email: str) -> User:
-    user = User(username=name, password=get_password_hash(password), email=email)
+async def create_user(db: AsyncSession, username: str, password: str, email: str) -> User:
+    user = User(username=username, password=get_password_hash(password), email=email)
     db.add(user)
     await db.commit()
     await db.refresh(user)
