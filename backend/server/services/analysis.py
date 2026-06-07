@@ -23,7 +23,7 @@ from ..redisDatabase import redis_db
 # ── Rate limiting ─────────────────────────────────────────────────────────────
 
 async def rate_limit_using_redis(user_id: str) -> bool:
-    MAX_REQUESTS = 60
+    MAX_REQUESTS = 2
     WINDOW_SECONDS = 60
 
     redis_key = f"rate_limit:{user_id}"
