@@ -102,25 +102,25 @@ def make_status_callback(job_id: str):
 async def run_analysis(job_id: str, file_path: str):
     """Upload image to Cloudinary and run the AI pipeline in parallel."""
     start_time = time.time()
-    async with AsyncSessionLocal() as db:
-        try:
-            loop = asyncio.get_event_loop()
+    try:
+        loop = asyncio.get_event_loop()
 
-            def do_upload():
-                with open(file_path, "rb") as f:
-                    image_bytes = f.read()
-                image_stream = io.BytesIO(image_bytes)
-                return cloudinary.uploader.upload(image_stream, folder="realitylens_uploads")
+        def do_upload():
+            with open(file_path, "rb") as f:
+                image_bytes = f.read()
+            image_stream = io.BytesIO(image_bytes)
+            return cloudinary.uploader.upload(image_stream, folder="realitylens_uploads")
 
-            upload_task = loop.run_in_executor(None, do_upload)
-            analysis_task = verify_content(file_path, make_status_callback(job_id))
+        upload_task = loop.run_in_executor(None, do_upload)
+        analysis_task = verify_content(file_path, make_status_callback(job_id))
 
-            # Run both in parallel
-            upload_result, result = await asyncio.gather(upload_task, analysis_task)
+        # Run both in parallel
+        upload_result, result = await asyncio.gather(upload_task, analysis_task)
 
-            secure_url = upload_result.get("secure_url")
-            public_id = upload_result.get("public_id")
+        secure_url = upload_result.get("secure_url")
+        public_id = upload_result.get("public_id")
 
+        async with AsyncSessionLocal() as db:
             await db.execute(
                 update(Job)
                 .where(Job.id == uuid.UUID(job_id))
@@ -131,10 +131,73 @@ async def run_analysis(job_id: str, file_path: str):
             time_taken = time.time() - start_time
             await complete_job(db, uuid.UUID(job_id), result, time_taken=time_taken)
 
-        except Exception as e:
-            print(f"❌ run_analysis failed for job {job_id}: {e}")
-            time_taken = time.time() - start_time
+    except Exception as e:
+        print(f"❌ run_analysis failed for job {job_id}: {e}")
+        time_taken = time.time() - start_time
+        async with AsyncSessionLocal() as db:
             await fail_job(db, uuid.UUID(job_id), str(e), time_taken=time_taken)
-        finally:
-            if os.path.exists(file_path):
-                os.remove(file_path)
+    finally:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
+async def verify_text_content(text: str, on_status=None):
+    """Run the three-phase AI pipeline: extract -> search -> score on text."""
+    start_time = time.time()
+    print(f"⏱️ Initiation started at: {time.strftime('%H:%M:%S', time.localtime(start_time))}")
+
+    async def status(msg: str):
+        if on_status:
+            await on_status(msg)
+
+    # Phase 1: extraction
+    ext_start = time.time()
+    await status("Extracting claim from text...")
+    extraction = await extractCall.extractionCallText(text)
+    print(f"⏱️ Extraction time: {time.time() - ext_start:.2f}s")
+    print(extraction)
+
+    if isinstance(extraction, str):
+        return extraction
+    if isinstance(extraction, dict) and extraction.get("error"):
+        return extraction
+    if "verdict" in extraction:
+        return extraction
+
+    # Phase 2: search
+    search_start = time.time()
+    await status("Searching for relevant information...")
+    search_text = await searchCall.searchCall(extraction)
+    print(f"⏱️ Searching time: {time.time() - search_start:.2f}s")
+
+    # Phase 3: scoring
+    score_start = time.time()
+    await status("Scoring and generating verdict...")
+    result = await scoreCall.scoreCall(extraction, search_text)
+    score_end = time.time()
+    print(f"⏱️ Scoring time: {score_end - score_start:.2f}s")
+    print(f"⏱️ Total verification time: {score_end - start_time:.2f}s")
+
+    await status("Analysis complete.")
+    return result
+
+async def run_analysis_text(job_id: str, file_path: str):
+    """Run the AI pipeline for text."""
+    start_time = time.time()
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            text_content = f.read()
+
+        result = await verify_text_content(text_content, make_status_callback(job_id))
+
+        time_taken = time.time() - start_time
+        async with AsyncSessionLocal() as db:
+            await complete_job(db, uuid.UUID(job_id), result, time_taken=time_taken)
+
+    except Exception as e:
+        print(f"❌ run_analysis_text failed for job {job_id}: {e}")
+        time_taken = time.time() - start_time
+        async with AsyncSessionLocal() as db:
+            await fail_job(db, uuid.UUID(job_id), str(e), time_taken=time_taken)
+    finally:
+        if os.path.exists(file_path):
+            os.remove(file_path)

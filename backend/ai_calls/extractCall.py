@@ -69,4 +69,45 @@ async def extractionCall(image_path):
     
     return extraction
     
+async def extractionCallText(text: str):
+    keys_to_try = getKeys.gemini_api_keys[:]
+    random.shuffle(keys_to_try)
 
+    print("🔍 Phase 1: Extracting claim from text...")
+    prompt = f"{extractionPrompt.EXTRACTION_TEXT_PROMPT}\n\nUser Text:\n{text}"
+    
+    raw_extraction, err = await aiCalls.call_groq_extraction(prompt)
+    if err:
+        print(f"⚠️ Groq text failed ({err}), trying Gemini...")
+        raw_extraction, err = await aiCalls.call_gemini(prompt, keys_to_try=keys_to_try)
+        if err:
+            return f"RealityLens: Extraction failed — {err}"
+            
+    try:
+        extraction = json.loads(raw_extraction)
+    except json.JSONDecodeError:
+        return {"error": "Failed to parse extraction response", "raw": raw_extraction}
+
+    claim = extraction.get("claim", "")
+
+    if extraction.get("is_satire"):
+        return {
+            "claim": claim,
+            "reality_score": 0.00,
+            "confidence": 0.95,
+            "verdict": "SATIRE",
+            "explanation": "This content appears to be from a satire or parody account. The claim should not be taken as factual news.",
+            "evidence": []
+        }
+
+    if claim == "UNREADABLE" or not claim:
+        return {
+            "claim": "Unable to extract a claim.",
+            "reality_score": 0.00,
+            "confidence": 0.1,
+            "verdict": "UNREADABLE",
+            "explanation": "The text was unclear or didn't contain a verifiable claim.",
+            "evidence": []
+        }
+    
+    return extraction

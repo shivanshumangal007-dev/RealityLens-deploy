@@ -10,15 +10,16 @@ All job/analysis endpoints:
 import os
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Response, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Response, UploadFile, Body
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..crud import create_job, get_job
 from ..database import get_db
 from ..models import Job
-from ..services.analysis import rate_limit_using_redis, run_analysis
+from ..services.analysis import rate_limit_using_redis, run_analysis, run_analysis_text
 from .deps import get_current_user_id
+from pydantic import BaseModel
 
 router = APIRouter(tags=["Jobs"])
 
@@ -50,6 +51,30 @@ async def submit_endpoint(
     background_tasks.add_task(run_analysis, str(job.id), file_path)
     return {"job_id": str(job.id)}
 
+class UserInput(BaseModel):
+    input:str
+
+
+@router.post("/submit-text")
+async def submit_text_endpoint(
+    background_tasks: BackgroundTasks,
+    text: UserInput,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    # Check rate limit first
+    allowed = await rate_limit_using_redis(user_id)
+    if not allowed:
+        raise HTTPException(status_code=429, detail="Rate limit exceeded")
+
+    job = await create_job(db, user_id=uuid.UUID(user_id))
+    file_path = os.path.join(UPLOAD_DIR, f"{job.id}_text.txt")
+
+    with open(file_path, "w", encoding="utf-8") as buffer:
+        buffer.write(text.input)
+
+    background_tasks.add_task(run_analysis_text, str(job.id), file_path)
+    return {"job_id": str(job.id)}
 
 @router.get("/status/{job_id}")
 async def status_endpoint(

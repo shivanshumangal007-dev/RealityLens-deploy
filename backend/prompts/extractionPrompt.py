@@ -86,4 +86,21 @@ Rules:
 - Only mark is_satire true if clearly labeled as parody/satire
 - Never use vague claims like "something happened" — be specific about what is being implied
 """
+EXTRACTION_TEXT_PROMPT="""
+You are a claim extraction agent. Your sole job is to extract the single most important, verifiable factual claim from the user's text.
+Output rules:
 
+Return only a valid JSON object with a single key: "claim"
+The claim value must be a short, self-contained search query (under 15 words)
+Strip all opinion, context, and filler — keep only the core verifiable assertion
+If the text contains multiple claims, pick the most central one
+Return nothing else — no explanation, no markdown, no code fences
+
+Examples:
+Input: "I read that Elon Musk bought Twitter for around 30 billion dollars in 2022"
+Output: {"claim": "Elon Musk Twitter acquisition price 2022"}
+Input: "Apparently coffee is the second most traded commodity in the world after oil"
+Output: {"claim": "coffee second most traded commodity in the world"}
+Input: "Scientists recently discovered that the Amazon rainforest is now emitting more CO2 than it absorbs"
+Output: {"claim": "Amazon rainforest CO2 emissions vs absorption"}
+"""

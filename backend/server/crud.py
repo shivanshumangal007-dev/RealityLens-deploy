@@ -68,7 +68,6 @@ async def complete_job(db: AsyncSession, job_id: uuid.UUID, result: dict, time_t
         )
     )
     await db.commit()
-    await db.close()
 
 async def fail_job(db: AsyncSession, job_id: uuid.UUID, error_message: str, time_taken: float | None = None):
     await db.execute(
@@ -80,7 +79,6 @@ async def fail_job(db: AsyncSession, job_id: uuid.UUID, error_message: str, time
         )
     )
     await db.commit()
-    await db.close()
 
 async def get_job(db: AsyncSession, job_id: uuid.UUID) -> Job | None:
     result = await db.execute(select(Job).where(Job.id == job_id))

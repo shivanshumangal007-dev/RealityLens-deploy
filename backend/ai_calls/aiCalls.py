@@ -69,6 +69,43 @@ async def call_groq_vision(prompt, image_bytes):
 
     return None, "All Groq vision models failed."
 
+async def call_groq_extraction(prompt):
+    """Groq fallback for text extraction."""
+    if not getKeys.groq_api_key:
+        return None, "GROQ_API_KEY is missing."
+    groq_client = AsyncGroq(api_key=getKeys.groq_api_key)
+    # We can use the regular GROQ_MODELS since we don't need vision
+    models = getattr(getKeys, "GROQ_MODELS", ["llama3-70b-8192", "mixtral-8x7b-32768", "llama3-8b-8192"])
+    
+    for model in models:
+        try:
+            print(f"🔍 Extracting with Groq text {model}...")
+            response = await groq_client.chat.completions.create(
+                model=model,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                temperature=0.1,
+                max_tokens=1500,
+            )
+            raw = response.choices[0].message.content.strip()
+            if raw.startswith("```json"):
+                raw = raw.replace("```json", "", 1).replace("```", "", 1).strip()
+            elif raw.startswith("```"):
+                raw = raw.replace("```", "", 2).strip()
+
+            return raw, None
+
+        except Exception as e:
+            err = str(e)
+            print(f"⚠️ Groq text error on {model}: {err}")
+            continue
+
+    return None, "All Groq text models failed."
+
 # function to call gemini ai
 async def call_gemini(prompt, image_part=None, gemini_api_keys=getKeys.gemini_api_keys, keys_to_try=None):
     """Try each key and model until one works. Returns parsed text or raises."""
@@ -242,7 +279,7 @@ async def call_groq(prompt):
                         break
                 else:
                     print(f"⚠️ Groq error on {model}: {err}")
-                    break
+                    break 
 
     return None, "All Groq models failed."
 
@@ -254,24 +291,30 @@ async def tavily_search(query, num_results=5):
 
     try:
         client = AsyncTavilyClient(api_key=getKeys.tavily_api_key)
+        CREDIBLE_DOMAINS = [
+            "reuters.com", "apnews.com", "bbc.com", "theguardian.com",
+            "nytimes.com", "washingtonpost.com", "aljazeera.com",
+            "timesofindia.com", "afp.com", "bloomberg.com",
+            "ft.com", "npr.org", "dw.com", "haaretz.com", "abc.net.au",
+            "who.int", "un.org", "nasa.gov", "cdc.gov", "nature.com",
+            "arxiv.org", "ncbi.nlm.nih.gov", "britannica.com"
+        ]
 
         response = await client.search(
             query=query,
-            max_results=num_results,
-            search_depth="basic",  # use "advanced" for better results but costs 2 credits
-            include_answer=True,   # Tavily gives a pre-summarized answer too
-        )   
+            search_depth="advanced",
+            include_domains=CREDIBLE_DOMAINS,
+            max_results=5
+        )
+        
+        if len(response.get("results", [])) < 2:
+            response = await client.search(
+                query=query,
+                max_results=num_results,
+                search_depth="basic",  # use "advanced" for better results but costs 2 credits
+            )   
 
         results = []
-
-        # Tavily gives a direct answer summary — prepend it as a result
-        if response.get("answer"):
-            results.append({
-                "title": "Tavily Summary",
-                "url": "",
-                "description": response["answer"],
-                "source": "Tavily AI Summary",
-            })
 
         for item in response.get("results", []):
             results.append({
