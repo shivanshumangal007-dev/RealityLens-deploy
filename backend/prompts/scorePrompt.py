@@ -44,6 +44,10 @@ NOT CREDIBLE (do not count as corroborating evidence):
 
 STEP 3 — IMAGE/VIDEO CHECKS (only if priority check did NOT trigger)
 
+CRITICAL: If Step 1 triggered (2+ credible sources confirmed the claim), you MUST
+have already returned JSON. Do NOT proceed to this step. If you are here, it means
+Step 1 did NOT trigger.
+
 These checks apply penalties or flags to the score. They do NOT override a
 claim that has credible news corroboration.
 
@@ -51,6 +55,15 @@ CHECK 1 · STOCK PHOTO/VIDEO
 Scan search results for: Adobe Stock, Getty Images, Shutterstock, iStock,
 Alamy, Pond5, Depositphotos, Vecteezy, or phrases like "stock photo",
 "stock video", "stock footage", "concept video", "royalty free".
+
+IMPORTANT — The following are NOT stock footage:
+- Video frames or screenshots of public figures speaking (politicians, CEOs,
+  celebrities at podiums, press conferences, interviews, rallies, speeches)
+- News broadcast stills or press conference footage
+- Official government or institutional video
+Only flag as stock if the search results explicitly link the image to a stock
+photo/video provider. Do NOT infer "stock footage" from generic appearances.
+
 IF FOUND AND no credible source confirmed the claim:
 → reality_score = 0.10, confidence = 0.92, verdict = "LIKELY FAKE"
 → Explanation: state clearly the image is staged stock footage, not a real event
