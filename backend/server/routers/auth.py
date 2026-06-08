@@ -129,7 +129,7 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)):
         user = await create_user(db=db, username=name, password=None, email=email)
 
     access_token = create_access_token(data={"sub": str(user.id)})
-    frontend_url = f"http://localhost:3000/auth-callback?token={access_token}&user_id={user.id}"
+    frontend_url = f"realitylens://auth-callback?token={access_token}&user_id={user.id}"
     return RedirectResponse(url=frontend_url)
 
 # ── Frontend Token Validation (React SDK) ─────────────────────────────────────
