@@ -71,10 +71,16 @@ IF FOUND AND no credible source confirmed the claim:
 
 IF FOUND BUT 1 credible source confirmed the claim (G = 0.7 from Step 1):
 → Do NOT apply LIKELY FAKE verdict
-→ Add note: "Video/image appears to be stock footage but the underlying event
-  has partial credible coverage"
+→ Add note: "Video/image appears to be stock footage but the underlying event has partial credible coverage"
 → Cap reality_score at 0.65, verdict = "UNVERIFIED"
 → Continue to Step 4.
+
+IF FOUND AND 2+ credible sources confirmed the claim:
+→ Do NOT apply LIKELY FAKE verdict
+→ The claim is REAL, even if the image is stock/illustrative.
+→ reality_score = 0.92, confidence = 0.88, verdict = "LIKELY REAL"
+→ Add note: "The specific image used is illustrative/stock, but the underlying news claim is verified by multiple credible sources."
+→ STOP. Return JSON immediately.
 
 CHECK 2 · VIRAL SOCIAL MEDIA WITH ZERO NEWS COVERAGE
 IF ALL of these are true:
