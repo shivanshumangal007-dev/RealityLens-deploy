@@ -291,27 +291,17 @@ async def tavily_search(query, num_results=5):
 
     try:
         client = AsyncTavilyClient(api_key=getKeys.tavily_api_key)
-        CREDIBLE_DOMAINS = [
-            "reuters.com", "apnews.com", "bbc.com", "theguardian.com",
-            "nytimes.com", "washingtonpost.com", "aljazeera.com",
-            "timesofindia.com", "afp.com", "bloomberg.com",
-            "ft.com", "npr.org", "dw.com", "haaretz.com", "abc.net.au",
-            "who.int", "un.org", "nasa.gov", "cdc.gov", "nature.com",
-            "arxiv.org", "ncbi.nlm.nih.gov", "britannica.com"
-        ]
-
         response = await client.search(
             query=query,
-            search_depth="advanced",
-            include_domains=CREDIBLE_DOMAINS,
-            max_results=5
+            search_depth="basic",
+            max_results=10
         )
-        
+
         if len(response.get("results", [])) < 2:
             response = await client.search(
                 query=query,
                 max_results=num_results,
-                search_depth="basic",  # use "advanced" for better results but costs 2 credits
+                search_depth="basic",  # fallback to basic if advanced somehow fails
             )   
 
         results = []
