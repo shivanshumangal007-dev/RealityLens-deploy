@@ -38,11 +38,15 @@ conf = ConnectionConfig(
     MAIL_USERNAME=os.getenv("MAIL_USERNAME"),
     MAIL_PASSWORD=os.getenv("MAIL_PASSWORD"),
     MAIL_FROM=os.getenv("MAIL_FROM"),
-    MAIL_PORT=465,                          # Standard port for TLS/STARTTLS
     MAIL_SERVER="smtp.gmail.com",
     MAIL_FROM_NAME="RealityLens",
-    MAIL_STARTTLS=True,                     # Gmail requires TLS
-    MAIL_SSL_TLS=False,
+    MAIL_PORT=465,                          # Correct port for Implicit SSL
+    
+    # --- FIX THE ENCRYPTION FLAGS HERE ---
+    MAIL_STARTTLS=False,                    # Disable STARTTLS entirely for port 465
+    MAIL_SSL_TLS=True,                      # Enable modern SSL/TLS
+    # --------------------------------------
+    
     USE_CREDENTIALS=True,
     VALIDATE_CERTS=True
 )
