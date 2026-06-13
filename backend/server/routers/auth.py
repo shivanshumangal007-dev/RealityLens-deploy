@@ -58,6 +58,10 @@ class VerifyOtp(BaseModel):
 
 @router.post("/register")
 async def register_user(credentials: UserCredentials, db: AsyncSession = Depends(get_db)):
+    import json
+    import random
+    import uuid
+
     # 1. Check if username is taken
     if await get_user(db, credentials.username):
         raise HTTPException(status_code=400, detail="Username already exists")
@@ -65,7 +69,6 @@ async def register_user(credentials: UserCredentials, db: AsyncSession = Depends
     # 2. Check if email is already registered
     existing_user = await get_user_by_email(db, credentials.email)
     if existing_user:
-        # If they exist but have no password, they previously registered via Google!
         if existing_user.password is None:
             raise HTTPException(
                 status_code=400,
@@ -73,37 +76,38 @@ async def register_user(credentials: UserCredentials, db: AsyncSession = Depends
             )
         raise HTTPException(status_code=400, detail="Email already exists")
 
-    # 3. Create a normal traditional user (with a hashed password)
-    user = await create_user(db, credentials.username, credentials.password, credentials.email)
-    
-    # Generate and store a 6-digit OTP
-    import random
+    # Generate a 6-digit OTP
     otp_code = str(random.randint(100000, 999999))
     
-    # Store OTP in Redis with a 5-minute expiration (300 seconds)
-    await redis_otp_db.setex(f"otp:{user.id}", 300, otp_code)
+    # Create a temporary token and store registration data in Redis
+    temp_token = uuid.uuid4().hex
+    reg_data = {
+        "username": credentials.username,
+        "password": credentials.password,
+        "email": credentials.email,
+        "otp": otp_code
+    }
     
-    # TODO: Integrate with an email service to send this OTP.
-    # For now, we will print it to the console so you can test it.
-
+    await redis_otp_db.setex(f"pending_reg:{temp_token}", 300, json.dumps(reg_data))
 
     r = resend.Emails.send({
-    "from": "onboarding@resend.dev",
-    "to": credentials.email,
-    "subject": "OTP",
-    "html": f"<p>Your otp is {otp_code}</p>"
+        "from": "onboarding@resend.dev",
+        "to": credentials.email,
+        "subject": "OTP",
+        "html": f"<p>Your otp is {otp_code}</p>"
     })
 
-
-    access_token = create_access_token(data={"sub": str(user.id)})
-    return {"access_token": access_token, "token_type": "bearer", "user_id": str(user.id)}
+    return {"access_token": temp_token, "token_type": "bearer", "status": "pending"}
 
 
 @router.post("/login")
 async def login_user(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
+    import json
+    import random
+    import uuid
+
     user = await get_user_by_email(db, credentials.email)
 
-    # SECURITY SAFEGUARD: reject Google-only accounts before verify_password runs on a NULL hash
     if user and user.password is None:
         raise HTTPException(
             status_code=400,
@@ -113,29 +117,25 @@ async def login_user(credentials: UserLogin, db: AsyncSession = Depends(get_db))
     if not user or not verify_password(credentials.password, user.password):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
-    # Generate and store a 6-digit OTP
-    import random
+    # Generate a 6-digit OTP
     otp_code = str(random.randint(100000, 999999))
     
-    # Store OTP in Redis with a 5-minute expiration (300 seconds)
-    await redis_otp_db.setex(f"otp:{user.id}", 300, otp_code)
+    temp_token = uuid.uuid4().hex
+    login_data = {
+        "user_id": str(user.id),
+        "otp": otp_code
+    }
     
-    # TODO: Integrate with an email service to send this OTP.
-    # For now, we will print it to the console so you can test it.
-
-    import resend
-
+    await redis_otp_db.setex(f"pending_login:{temp_token}", 300, json.dumps(login_data))
 
     r = resend.Emails.send({
-    "from": "onboarding@resend.dev",
-    "to": credentials.email,
-    "subject": "OTP",
-    "html": f"<p>Your otp is {otp_code}</p>"
+        "from": "onboarding@resend.dev",
+        "to": credentials.email,
+        "subject": "OTP",
+        "html": f"<p>Your otp is {otp_code}</p>"
     })
 
-
-    access_token = create_access_token(data={"sub": str(user.id)})
-    return {"access_token": access_token, "token_type": "bearer", "user_id": str(user.id)}
+    return {"access_token": temp_token, "token_type": "bearer", "status": "pending"}
 
 
 @router.get("/me")
@@ -252,28 +252,37 @@ async def verify_google_token(payload: GoogleTokenPayload, db: AsyncSession = De
 
 @router.post("/verify-otp")
 async def verify_otp(cred: VerifyOtp, db: AsyncSession = Depends(get_db)):
-    try:
-        # Decode the token to identify the user
-        payload = jwt.decode(cred.token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id = payload.get("sub")
-        if not user_id:
-            raise HTTPException(status_code=401, detail="Invalid token payload")
-    except jwt.PyJWTError:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    import json
+    
+    temp_token = cred.token
+    
+    # 1. Check if it's a pending registration
+    reg_data_bytes = await redis_otp_db.get(f"pending_reg:{temp_token}")
+    if reg_data_bytes:
+        reg_data = json.loads(reg_data_bytes.decode("utf-8"))
+        if reg_data["otp"] != cred.otp:
+            raise HTTPException(status_code=400, detail="Invalid OTP code.")
+            
+        # Create user in DB now that OTP is verified
+        user = await create_user(db, reg_data["username"], reg_data["password"], reg_data["email"])
+        await redis_otp_db.delete(f"pending_reg:{temp_token}")
+        
+        # Issue real JWT
+        access_token = create_access_token(data={"sub": str(user.id)})
+        return {"access_token": access_token, "token_type": "bearer", "user_id": str(user.id), "message": "User registered and verified successfully"}
 
-    # Retrieve the OTP from Redis using the user_id
-    stored_otp_bytes = await redis_otp_db.get(f"otp:{user_id}")
-    
-    if not stored_otp_bytes:
-        raise HTTPException(status_code=400, detail="OTP expired or not found. Please log in again to receive a new OTP.")
+    # 2. Check if it's a pending login
+    login_data_bytes = await redis_otp_db.get(f"pending_login:{temp_token}")
+    if login_data_bytes:
+        login_data = json.loads(login_data_bytes.decode("utf-8"))
+        if login_data["otp"] != cred.otp:
+            raise HTTPException(status_code=400, detail="Invalid OTP code.")
+            
+        user_id = login_data["user_id"]
+        await redis_otp_db.delete(f"pending_login:{temp_token}")
         
-    stored_otp = stored_otp_bytes.decode("utf-8")
-    
-    if stored_otp != cred.otp:
-        raise HTTPException(status_code=400, detail="Invalid OTP code.")
-        
-    # If OTP is valid, remove it from Redis so it can't be reused
-    await redis_otp_db.delete(f"otp:{user_id}")
-    
-    # Return success, echoing the access token back for the frontend
-    return {"access_token": cred.token, "token_type": "bearer", "user_id": user_id, "message": "OTP verified successfully"}
+        # Issue real JWT
+        access_token = create_access_token(data={"sub": user_id})
+        return {"access_token": access_token, "token_type": "bearer", "user_id": user_id, "message": "OTP verified successfully"}
+
+    raise HTTPException(status_code=400, detail="OTP session expired or invalid. Please request a new OTP.")
