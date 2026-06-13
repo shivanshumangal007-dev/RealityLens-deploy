@@ -62,6 +62,20 @@ async def register_user(credentials: UserCredentials, db: AsyncSession = Depends
 
     # 3. Create a normal traditional user (with a hashed password)
     user = await create_user(db, credentials.username, credentials.password, credentials.email)
+    
+    # Generate and store a 6-digit OTP
+    import random
+    otp_code = str(random.randint(100000, 999999))
+    
+    # Store OTP in Redis with a 5-minute expiration (300 seconds)
+    await redis_otp_db.setex(f"otp:{user.id}", 300, otp_code)
+    
+    # TODO: Integrate with an email service to send this OTP.
+    # For now, we will print it to the console so you can test it.
+    print(f"=========================================")
+    print(f"OTP for new user {user.email}: {otp_code}")
+    print(f"=========================================")
+
     access_token = create_access_token(data={"sub": str(user.id)})
     return {"access_token": access_token, "token_type": "bearer", "user_id": str(user.id)}
 
