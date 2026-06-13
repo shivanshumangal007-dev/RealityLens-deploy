@@ -8,6 +8,8 @@ All authentication endpoints:
   GET  /login/google
   GET  /auth/google/callback
 """
+from pydantic import functional_serializers
+from pydantic import functional_serializers
 import os
 import uuid
 import jwt
@@ -24,7 +26,17 @@ from ..database import get_db
 from ..Redis_Otp import redis_otp_db
 from .deps import get_current_user_id
 
+from dotenv import load_dotenv
+load_dotenv()
+
+import os
+import resend
+
+
+
 router = APIRouter(tags=["Authentication"])
+resend.api_key = os.getenv("RESEND_API_KEY")
+
 
 # ── Pydantic schemas ──────────────────────────────────────────────────────────
 
@@ -72,9 +84,15 @@ async def register_user(credentials: UserCredentials, db: AsyncSession = Depends
     
     # TODO: Integrate with an email service to send this OTP.
     # For now, we will print it to the console so you can test it.
-    print(f"=========================================")
-    print(f"OTP for new user {user.email}: {otp_code}")
-    print(f"=========================================")
+
+
+    r = resend.Emails.send({
+    "from": "onboarding@resend.dev",
+    "to": credentials.email,
+    "subject": "OTP",
+    "html": f"<p>Your otp is {otp_code}</p>"
+    })
+
 
     access_token = create_access_token(data={"sub": str(user.id)})
     return {"access_token": access_token, "token_type": "bearer", "user_id": str(user.id)}
@@ -103,9 +121,17 @@ async def login_user(credentials: UserLogin, db: AsyncSession = Depends(get_db))
     
     # TODO: Integrate with an email service to send this OTP.
     # For now, we will print it to the console so you can test it.
-    print(f"=========================================")
-    print(f"OTP for login user {user.email}: {otp_code}")
-    print(f"=========================================")
+
+    import resend
+
+
+    r = resend.Emails.send({
+    "from": "onboarding@resend.dev",
+    "to": credentials.email,
+    "subject": "OTP",
+    "html": f"<p>Your otp is {otp_code}</p>"
+    })
+
 
     access_token = create_access_token(data={"sub": str(user.id)})
     return {"access_token": access_token, "token_type": "bearer", "user_id": str(user.id)}
