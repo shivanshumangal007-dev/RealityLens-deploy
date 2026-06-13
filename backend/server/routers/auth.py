@@ -26,18 +26,26 @@ from ..crud import create_user, get_user, get_user_by_email, get_user_from_useri
 from ..database import get_db
 from ..Redis_Otp import redis_otp_db
 from .deps import get_current_user_id
-
+from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
 from dotenv import load_dotenv
 load_dotenv()
 
 import os
-import resend
-
-
 
 router = APIRouter(tags=["Authentication"])
-resend.api_key = os.getenv("RESEND_API_KEY")
 
+conf = ConnectionConfig(
+    MAIL_USERNAME=os.getenv("MAIL_USERNAME"),
+    MAIL_PASSWORD=os.getenv("MAIL_PASSWORD"),
+    MAIL_FROM=os.getenv("MAIL_FROM"),
+    MAIL_PORT=587,                          # Standard port for TLS/STARTTLS
+    MAIL_SERVER="smtp.gmail.com",
+    MAIL_FROM_NAME="RealityLens",
+    MAIL_STARTTLS=True,                     # Gmail requires TLS
+    MAIL_SSL_TLS=False,
+    USE_CREDENTIALS=True,
+    VALIDATE_CERTS=True
+)
 
 # ── Pydantic schemas ──────────────────────────────────────────────────────────
 
@@ -90,12 +98,14 @@ async def register_user(credentials: UserCredentials, db: AsyncSession = Depends
     
     await redis_otp_db.setex(f"pending_reg:{temp_token}", 300, json.dumps(reg_data))
 
-    r = resend.Emails.send({
-        "from": "onboarding@resend.dev",
-        "to": credentials.email,
-        "subject": "OTP",
-        "html": f"<p>Your otp is {otp_code}</p>"
-    })
+    message = MessageSchema(
+        subject="Your RealityLens OTP",
+        recipients=[credentials.email],
+        body=f"<p>Your OTP is <strong>{otp_code}</strong></p>",
+        subtype=MessageType.html
+    )
+    fm = FastMail(conf)
+    await fm.send_message(message)
 
     return {"access_token": temp_token, "token_type": "bearer", "status": "pending"}
 
@@ -128,12 +138,14 @@ async def login_user(credentials: UserLogin, db: AsyncSession = Depends(get_db))
     
     await redis_otp_db.setex(f"pending_login:{temp_token}", 300, json.dumps(login_data))
 
-    r = resend.Emails.send({
-        "from": "onboarding@resend.dev",
-        "to": credentials.email,
-        "subject": "OTP",
-        "html": f"<p>Your otp is {otp_code}</p>"
-    })
+    message = MessageSchema(
+        subject="Your RealityLens OTP",
+        recipients=[credentials.email],
+        body=f"<p>Your OTP is <strong>{otp_code}</strong></p>",
+        subtype=MessageType.html
+    )
+    fm = FastMail(conf)
+    await fm.send_message(message)
 
     return {"access_token": temp_token, "token_type": "bearer", "status": "pending"}
 
