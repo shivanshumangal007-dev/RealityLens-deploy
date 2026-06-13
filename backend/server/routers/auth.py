@@ -144,12 +144,27 @@ class GoogleTokenPayload(BaseModel):
 async def verify_google_token(payload: GoogleTokenPayload, db: AsyncSession = Depends(get_db)):
     """Handle id_token sent directly from the frontend React app."""
     try:
-        # Verify the token with Google
+        # Collect all valid client IDs (Electron/web + mobile)
+        valid_client_ids = [
+            cid for cid in [
+                os.getenv("GOOGLE_CLIENT_ID"),          # Electron / Web
+                os.getenv("GOOGLE_CLIENT_ID_MOBILE"),   # Mobile (Android/iOS)
+            ] if cid
+        ]
+
+        # Verify signature & claims without audience lock so both clients pass
         id_info = id_token.verify_oauth2_token(
             payload.id_token,
             google_requests.Request(),
-            os.getenv("GOOGLE_CLIENT_ID")
+            audience=None,  # skip single-audience check
         )
+
+        # Manually enforce audience against our whitelist
+        if id_info.get("aud") not in valid_client_ids:
+            raise HTTPException(
+                status_code=401,
+                detail="Token audience does not match any known client ID",
+            )
         
         email = id_info.get("email")
         name = id_info.get("name")
