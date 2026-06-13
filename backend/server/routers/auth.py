@@ -10,6 +10,7 @@ All authentication endpoints:
 """
 import os
 import uuid
+import jwt
 
 from authlib.integrations.starlette_client import OAuth, OAuthError
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -17,9 +18,10 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..auth import create_access_token, verify_password
+from ..auth import create_access_token, verify_password, ALGORITHM, SECRET_KEY
 from ..crud import create_user, get_user, get_user_by_email, get_user_from_userid
 from ..database import get_db
+from ..Redis_Otp import redis_otp_db
 from .deps import get_current_user_id
 
 router = APIRouter(tags=["Authentication"])
@@ -34,6 +36,10 @@ class UserCredentials(BaseModel):
 class UserLogin(BaseModel):
     email: str
     password: str
+
+class VerifyOtp(BaseModel):
+    otp:str
+    token:str
 
 # ── Standard auth endpoints ───────────────────────────────────────────────────
 
@@ -186,3 +192,34 @@ async def verify_google_token(payload: GoogleTokenPayload, db: AsyncSession = De
     except ValueError:
         # Invalid token
         raise HTTPException(status_code=401, detail="Invalid Google token")
+
+
+
+
+@router.post("/verify-otp")
+async def verify_otp(cred: VerifyOtp, db: AsyncSession = Depends(get_db)):
+    try:
+        # Decode the token to identify the user
+        payload = jwt.decode(cred.token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid token payload")
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    # Retrieve the OTP from Redis using the user_id
+    stored_otp_bytes = await redis_otp_db.get(f"otp:{user_id}")
+    
+    if not stored_otp_bytes:
+        raise HTTPException(status_code=400, detail="OTP expired or not found. Please log in again to receive a new OTP.")
+        
+    stored_otp = stored_otp_bytes.decode("utf-8")
+    
+    if stored_otp != cred.otp:
+        raise HTTPException(status_code=400, detail="Invalid OTP code.")
+        
+    # If OTP is valid, remove it from Redis so it can't be reused
+    await redis_otp_db.delete(f"otp:{user_id}")
+    
+    # Return success, echoing the access token back for the frontend
+    return {"access_token": cred.token, "token_type": "bearer", "user_id": user_id, "message": "OTP verified successfully"}
