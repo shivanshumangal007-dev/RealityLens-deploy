@@ -8,6 +8,7 @@ All authentication endpoints:
   GET  /login/google
   GET  /auth/google/callback
 """
+
 from pydantic import functional_serializers
 from pydantic import functional_serializers
 import os
