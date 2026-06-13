@@ -26,30 +26,34 @@ from ..crud import create_user, get_user, get_user_by_email, get_user_from_useri
 from ..database import get_db
 from ..Redis_Otp import redis_otp_db
 from .deps import get_current_user_id
-from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
+import httpx
 from dotenv import load_dotenv
-load_dotenv()
-
 import os
+import hashlib
+import base64
 
 router = APIRouter(tags=["Authentication"])
 
-conf = ConnectionConfig(
-    MAIL_USERNAME=os.getenv("MAIL_USERNAME"),
-    MAIL_PASSWORD=os.getenv("MAIL_PASSWORD"),
-    MAIL_FROM=os.getenv("MAIL_FROM"),
-    MAIL_SERVER="smtp.gmail.com",
-    MAIL_FROM_NAME="RealityLens",
-    MAIL_PORT=465,                          # Correct port for Implicit SSL
-    
-    # --- FIX THE ENCRYPTION FLAGS HERE ---
-    MAIL_STARTTLS=False,                    # Disable STARTTLS entirely for port 465
-    MAIL_SSL_TLS=True,                      # Enable modern SSL/TLS
-    # --------------------------------------
-    
-    USE_CREDENTIALS=True,
-    VALIDATE_CERTS=True
-)
+load_dotenv()
+BREVO_API_KEY = os.getenv("BREVO_API_KEY")
+MAIL_FROM = os.getenv("MAIL_FROM")
+
+async def send_otp_email(to_email: str, otp: str):
+    url = "https://api.brevo.com/v3/smtp/email"
+    headers = {
+        "accept": "application/json",
+        "api-key": BREVO_API_KEY,
+        "content-type": "application/json"
+    }
+    payload = {
+        "sender": {"email": MAIL_FROM, "name": "RealityLens"},
+        "to": [{"email": to_email}],
+        "subject": "Your RealityLens OTP Code",
+        "htmlContent": f"<html><body><p>Your OTP code is <strong>{otp}</strong>. It expires in 5 minutes.</p></body></html>"
+    }
+    async with httpx.AsyncClient() as client:
+        response = await client.post(url, headers=headers, json=payload)
+        response.raise_for_status()
 
 # ── Pydantic schemas ──────────────────────────────────────────────────────────
 
@@ -91,6 +95,13 @@ async def register_user(credentials: UserCredentials, db: AsyncSession = Depends
     # Generate a 6-digit OTP
     otp_code = str(random.randint(100000, 999999))
     
+    # Send email
+    try:
+        await send_otp_email(credentials.email, otp_code)
+    except Exception as e:
+        print(f"Failed to send OTP email: {e}")
+        raise HTTPException(status_code=500, detail="Failed to send OTP email")
+    
     # Create a temporary token and store registration data in Redis
     temp_token = uuid.uuid4().hex
     reg_data = {
@@ -101,15 +112,6 @@ async def register_user(credentials: UserCredentials, db: AsyncSession = Depends
     }
     
     await redis_otp_db.setex(f"pending_reg:{temp_token}", 300, json.dumps(reg_data))
-
-    message = MessageSchema(
-        subject="Your RealityLens OTP",
-        recipients=[credentials.email],
-        body=f"<p>Your OTP is <strong>{otp_code}</strong></p>",
-        subtype=MessageType.html
-    )
-    fm = FastMail(conf)
-    await fm.send_message(message)
 
     return {"access_token": temp_token, "token_type": "bearer", "status": "pending"}
 
@@ -134,6 +136,13 @@ async def login_user(credentials: UserLogin, db: AsyncSession = Depends(get_db))
     # Generate a 6-digit OTP
     otp_code = str(random.randint(100000, 999999))
     
+    # Send email
+    try:
+        await send_otp_email(credentials.email, otp_code)
+    except Exception as e:
+        print(f"Failed to send OTP email: {e}")
+        raise HTTPException(status_code=500, detail="Failed to send OTP email")
+    
     temp_token = uuid.uuid4().hex
     login_data = {
         "user_id": str(user.id),
@@ -141,15 +150,6 @@ async def login_user(credentials: UserLogin, db: AsyncSession = Depends(get_db))
     }
     
     await redis_otp_db.setex(f"pending_login:{temp_token}", 300, json.dumps(login_data))
-
-    message = MessageSchema(
-        subject="Your RealityLens OTP",
-        recipients=[credentials.email],
-        body=f"<p>Your OTP is <strong>{otp_code}</strong></p>",
-        subtype=MessageType.html
-    )
-    fm = FastMail(conf)
-    await fm.send_message(message)
 
     return {"access_token": temp_token, "token_type": "bearer", "status": "pending"}
 
@@ -276,7 +276,8 @@ async def verify_otp(cred: VerifyOtp, db: AsyncSession = Depends(get_db)):
     reg_data_bytes = await redis_otp_db.get(f"pending_reg:{temp_token}")
     if reg_data_bytes:
         reg_data = json.loads(reg_data_bytes.decode("utf-8"))
-        if reg_data["otp"] != cred.otp:
+        
+        if reg_data["otp"] != cred.otp: 
             raise HTTPException(status_code=400, detail="Invalid OTP code.")
             
         # Create user in DB now that OTP is verified
@@ -291,10 +292,16 @@ async def verify_otp(cred: VerifyOtp, db: AsyncSession = Depends(get_db)):
     login_data_bytes = await redis_otp_db.get(f"pending_login:{temp_token}")
     if login_data_bytes:
         login_data = json.loads(login_data_bytes.decode("utf-8"))
+        
+        user_id = login_data["user_id"]
+        user = await get_user_from_userid(db, uuid.UUID(user_id))
+
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
         if login_data["otp"] != cred.otp:
             raise HTTPException(status_code=400, detail="Invalid OTP code.")
             
-        user_id = login_data["user_id"]
         await redis_otp_db.delete(f"pending_login:{temp_token}")
         
         # Issue real JWT
