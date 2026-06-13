@@ -94,6 +94,19 @@ async def login_user(credentials: UserLogin, db: AsyncSession = Depends(get_db))
     if not user or not verify_password(credentials.password, user.password):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
+    # Generate and store a 6-digit OTP
+    import random
+    otp_code = str(random.randint(100000, 999999))
+    
+    # Store OTP in Redis with a 5-minute expiration (300 seconds)
+    await redis_otp_db.setex(f"otp:{user.id}", 300, otp_code)
+    
+    # TODO: Integrate with an email service to send this OTP.
+    # For now, we will print it to the console so you can test it.
+    print(f"=========================================")
+    print(f"OTP for login user {user.email}: {otp_code}")
+    print(f"=========================================")
+
     access_token = create_access_token(data={"sub": str(user.id)})
     return {"access_token": access_token, "token_type": "bearer", "user_id": str(user.id)}
 
