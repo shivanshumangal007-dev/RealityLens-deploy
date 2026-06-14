@@ -8,6 +8,7 @@ Application entry point. Handles:
 
 Business logic lives in routers/ and services/.
 """
+from pydantic import BaseModel
 import asyncio
 import sys
 from contextlib import asynccontextmanager
@@ -148,3 +149,17 @@ app.include_router(jobs.router)
 @app.get("/health_check")
 async def health_check():
     return {"status": "healthy"}
+
+class updateCheck(BaseModel):
+    version: str
+
+current_version = "11.2.8"
+
+@app.post("/check-updates")
+async def update_check(update_info: updateCheck):
+    
+    if update_info.version != current_version:
+        return {"update_available": True, "latest_version": current_version}
+    else:
+        return {"update_available": False, "latest_version": current_version}
+
