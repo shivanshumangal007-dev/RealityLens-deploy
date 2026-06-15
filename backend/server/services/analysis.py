@@ -189,6 +189,9 @@ async def run_analysis_text(job_id: str, file_path: str):
 
         result = await verify_text_content(text_content, make_status_callback(job_id))
 
+        if isinstance(result, dict):
+            result["input"] = text_content
+
         time_taken = time.time() - start_time
         async with AsyncSessionLocal() as db:
             await complete_job(db, uuid.UUID(job_id), result, time_taken=time_taken)
