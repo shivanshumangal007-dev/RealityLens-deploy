@@ -153,7 +153,7 @@ async def health_check():
 class updateCheck(BaseModel):
     version: str
 
-current_version = "11.2.8"
+current_version = "11.2.9"
 
 @app.post("/check-updates")
 async def update_check(update_info: updateCheck):
