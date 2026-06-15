@@ -269,7 +269,7 @@ async def verify_google_token(payload: GoogleTokenPayload, db: AsyncSession = De
 @router.post("/verify-otp")
 async def verify_otp(cred: VerifyOtp, db: AsyncSession = Depends(get_db)):
     import json
-    
+     
     temp_token = cred.token
     
     # 1. Check if it's a pending registration

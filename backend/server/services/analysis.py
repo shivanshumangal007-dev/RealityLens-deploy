@@ -27,7 +27,7 @@ async def rate_limit_using_redis(user_id: str) -> bool:
     WINDOW_SECONDS = 60
     
     # User with admin ID bypasses rate limiting
-    if user_id == "47a617fc-861d-4f46-8348-9e78374cdb54":
+    if user_id == "234dc988-5f74-4a9e-9915-53f08230435f":
         return True
 
     redis_key = f"rate_limit:{user_id}"
