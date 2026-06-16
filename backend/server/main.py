@@ -8,6 +8,7 @@ Application entry point. Handles:
 
 Business logic lives in routers/ and services/.
 """
+from pydantic import BaseModel
 import asyncio
 import sys
 from contextlib import asynccontextmanager
@@ -154,11 +155,43 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from fastapi import Request
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError
+
 # Register routers
 app.include_router(auth.router)
 app.include_router(jobs.router)
+
+@app.exception_handler(IntegrityError)
+async def integrity_error_handler(request: Request, exc: IntegrityError):
+    error_str = str(exc.orig) if exc.orig else str(exc)
+    if "ForeignKeyViolation" in error_str and "user_id" in error_str:
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "User account has been deleted or no longer exists. Please log in again."},
+        )
+    return JSONResponse(
+        status_code=400,
+        content={"detail": "A database integrity error occurred."},
+    )
 
 
 @app.get("/health_check")
 async def health_check():
     return {"status": "healthy"}
+
+class updateCheck(BaseModel):
+    version: str
+
+
+current_version = "11.2.9"
+
+@app.post("/update_check")
+async def update_check(update: updateCheck):
+    if update.version == current_version:
+        return {"status": "up_to_date","required":False}
+    else:
+        return {"status": "update_available", "current_version": current_version, "required":True}
+
+

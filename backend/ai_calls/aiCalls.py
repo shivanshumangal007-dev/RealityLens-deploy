@@ -12,99 +12,137 @@ import backend.ai_calls.getKeys as getKeys
 
 
 # function to call groq vision ai
-async def call_groq_vision(prompt, image_bytes):
+async def call_groq_vision(prompt, image_bytes, groq_api_keys=getKeys.groq_api_keys, keys_to_try=None):
     """Groq vision fallback for extraction when Gemini fails."""
     # check if the groq api key is present
-    if not getKeys.groq_api_key:
+    if not groq_api_keys:
         return None, "GROQ_API_KEY is missing."
+        
+    if keys_to_try is None:
+        keys_to_try = groq_api_keys[:]
+        random.shuffle(keys_to_try)
+        
     # encode image bytes to base64
     image_b64 = base64.b64encode(image_bytes).decode("utf-8")
-    # create a groq client
-    groq_client = AsyncGroq(api_key=getKeys.groq_api_key)
     # only these Groq models support vision
     vision_models = getKeys.vision_models
     
-    # loop through vision models and try to extract information
-    for model in vision_models:
-        # try to extract information
-        try:
-            print(f"🔍 Extracting with Groq vision {model}...")
-            # send the prompt and image to the groq vision api
-            response = await groq_client.chat.completions.create(
-                model=model,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{image_b64}"
+    i = 0
+    while i < len(keys_to_try):
+        key = keys_to_try[i]
+        key_exhausted = False
+        # create a groq client
+        groq_client = AsyncGroq(api_key=key)
+        
+        # loop through vision models and try to extract information
+        for model in vision_models:
+            # try to extract information
+            try:
+                print(f"🔍 Extracting with Groq vision {model}...")
+                # send the prompt and image to the groq vision api
+                response = await groq_client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:image/jpeg;base64,{image_b64}"
+                                    }
+                                },
+                                {
+                                    "type": "text",
+                                    "text": prompt
                                 }
-                            },
-                            {
-                                "type": "text",
-                                "text": prompt
-                            }
-                        ]
-                    }
-                ],
-                temperature=0.1,
-                max_tokens=1500,
-            )
-            # get the raw response
-            raw = response.choices[0].message.content.strip()
-            # clean up the response
-            if raw.startswith("```json"):
-                raw = raw.replace("```json", "", 1).replace("```", "", 1).strip()
-            elif raw.startswith("```"):
-                raw = raw.replace("```", "", 2).strip()
+                            ]
+                        }
+                    ],
+                    temperature=0.1,
+                    max_tokens=1500,
+                )
+                # get the raw response
+                raw = response.choices[0].message.content.strip()
+                # clean up the response
+                if raw.startswith("```json"):
+                    raw = raw.replace("```json", "", 1).replace("```", "", 1).strip()
+                elif raw.startswith("```"):
+                    raw = raw.replace("```", "", 2).strip()
 
-            return raw, None
+                return raw, None
 
-        except Exception as e:
-            err = str(e)
-            print(f"⚠️ Groq vision error on {model}: {err}")
-            continue
+            except Exception as e:
+                err = str(e)
+                if "429" in err or "rate_limit" in err.lower() or "rate limit" in err.lower():
+                    print(f"⚠️ Groq rate limit on {model}, trying next key...")
+                    keys_to_try.pop(i)
+                    key_exhausted = True
+                    break
+                else:
+                    print(f"⚠️ Groq vision error on {model}: {err}")
+                    continue
+        
+        if not key_exhausted:
+            i += 1
 
-    return None, "All Groq vision models failed."
+    return None, "All Groq vision models and keys failed."
 
-async def call_groq_extraction(prompt):
+async def call_groq_extraction(prompt, groq_api_keys=getKeys.groq_api_keys, keys_to_try=None):
     """Groq fallback for text extraction."""
-    if not getKeys.groq_api_key:
+    if not groq_api_keys:
         return None, "GROQ_API_KEY is missing."
-    groq_client = AsyncGroq(api_key=getKeys.groq_api_key)
+
+    if keys_to_try is None:
+        keys_to_try = groq_api_keys[:]
+        random.shuffle(keys_to_try)
+
     # We can use the regular GROQ_MODELS since we don't need vision
     models = getattr(getKeys, "GROQ_MODELS", ["llama3-70b-8192", "mixtral-8x7b-32768", "llama3-8b-8192"])
     
-    for model in models:
-        try:
-            print(f"🔍 Extracting with Groq text {model}...")
-            response = await groq_client.chat.completions.create(
-                model=model,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
-                temperature=0.1,
-                max_tokens=1500,
-            )
-            raw = response.choices[0].message.content.strip()
-            if raw.startswith("```json"):
-                raw = raw.replace("```json", "", 1).replace("```", "", 1).strip()
-            elif raw.startswith("```"):
-                raw = raw.replace("```", "", 2).strip()
+    i = 0
+    while i < len(keys_to_try):
+        key = keys_to_try[i]
+        key_exhausted = False
+        groq_client = AsyncGroq(api_key=key)
 
-            return raw, None
+        for model in models:
+            try:
+                print(f"🔍 Extracting with Groq text {model}...")
+                response = await groq_client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ],
+                    temperature=0.1,
+                    max_tokens=1500,
+                )
+                raw = response.choices[0].message.content.strip()
+                if raw.startswith("```json"):
+                    raw = raw.replace("```json", "", 1).replace("```", "", 1).strip()
+                elif raw.startswith("```"):
+                    raw = raw.replace("```", "", 2).strip()
 
-        except Exception as e:
-            err = str(e)
-            print(f"⚠️ Groq text error on {model}: {err}")
-            continue
+                return raw, None
 
-    return None, "All Groq text models failed."
+            except Exception as e:
+                err = str(e)
+                if "429" in err or "rate limit" in err.lower() or "rate_limit" in err.lower():
+                    print(f"⚠️ Groq rate limit on {model}, trying next key...")
+                    keys_to_try.pop(i)
+                    key_exhausted = True
+                    break
+                else:
+                    print(f"⚠️ Groq text error on {model}: {err}")
+                    continue
+
+        if not key_exhausted:
+            i += 1
+
+    return None, "All Groq text models and keys failed."
 
 # function to call gemini ai
 async def call_gemini(prompt, image_part=None, gemini_api_keys=getKeys.gemini_api_keys, keys_to_try=None):
@@ -236,89 +274,124 @@ async def call_kimi(prompt, image_bytes=None):
     except Exception as e:
         return None, f"Kimi-K2 Connection Error: {str(e)}"
     
-async def call_groq(prompt):
+async def call_groq(prompt, groq_api_keys=getKeys.groq_api_keys, keys_to_try=None):
     """Call Groq API with the given prompt. Returns response text or raises."""
-    if not getKeys.groq_api_key:
+    if not groq_api_keys:
         raise ValueError("GROQ_API_KEY is missing.")
     
+    if keys_to_try is None:
+        keys_to_try = groq_api_keys[:]
+        random.shuffle(keys_to_try)
 
-    client = AsyncGroq(api_key=getKeys.groq_api_key)
     MAX_RETRIES = 2
-    for model in getKeys.GROQ_MODELS:
-        for attempt in range(MAX_RETRIES):
-            try:
-                print(f"🤖 Scoring with Groq {model}...")
-                response = await client.chat.completions.create(
-                    model=model,
-                        messages=[
-                            {"role": "system", "content": SCORING_SYSTEM_PROMPT},
-                            {"role": "user", "content": prompt}
-                        ],
-                    temperature=0.1,  # Low temp for consistent structured output
-                    max_tokens=1500,
-                )
+    i = 0
+    while i < len(keys_to_try):
+        key = keys_to_try[i]
+        key_exhausted = False
+        client = AsyncGroq(api_key=key)
 
-                raw = response.choices[0].message.content.strip()
-                if raw.startswith("```json"):
-                    raw = raw.replace("```json", "", 1).replace("```", "", 1).strip()
-                elif raw.startswith("```"):
-                    raw = raw.replace("```", "", 2).strip()
+        for model in getKeys.GROQ_MODELS:
+            for attempt in range(MAX_RETRIES):
+                try:
+                    print(f"🤖 Scoring with Groq {model}...")
+                    response = await client.chat.completions.create(
+                        model=model,
+                            messages=[
+                                {"role": "system", "content": SCORING_SYSTEM_PROMPT},
+                                {"role": "user", "content": prompt}
+                            ],
+                        temperature=0.1,  # Low temp for consistent structured output
+                        max_tokens=1500,
+                    )
 
-                return raw, None
+                    raw = response.choices[0].message.content.strip()
+                    if raw.startswith("```json"):
+                        raw = raw.replace("```json", "", 1).replace("```", "", 1).strip()
+                    elif raw.startswith("```"):
+                        raw = raw.replace("```", "", 2).strip()
 
-            except Exception as e:
-                err = str(e)
-                if "429" in err or "rate_limit" in err.lower():
-                    if attempt < MAX_RETRIES - 1:
-                        wait = 5 * (attempt + 1)
-                        print(f"⚠️ Groq rate limit on {model}, retrying in {wait}s...")
-                        await asyncio.sleep(wait)
-                        continue
+                    return raw, None
+
+                except Exception as e:
+                    err = str(e)
+                    if "429" in err or "rate_limit" in err.lower() or "rate limit" in err.lower():
+                        if attempt < MAX_RETRIES - 1:
+                            wait = 5 * (attempt + 1)
+                            print(f"⚠️ Groq rate limit on {model}, retrying in {wait}s...")
+                            await asyncio.sleep(wait)
+                            continue
+                        else:
+                            print(f"⚠️ Groq rate limit on {model} persists, trying next key...")
+                            keys_to_try.pop(i)
+                            key_exhausted = True
+                            break
                     else:
-                        print(f"⚠️ Groq rate limit on {model} persists, trying next...")
-                        break
-                else:
-                    print(f"⚠️ Groq error on {model}: {err}")
-                    break 
+                        print(f"⚠️ Groq error on {model}: {err}")
+                        break 
+            
+            if key_exhausted:
+                break
 
-    return None, "All Groq models failed."
+        if not key_exhausted:
+            i += 1
 
-async def tavily_search(query, num_results=5):
+    return None, "All Groq models and keys failed."
+
+async def tavily_search(query, num_results=5, tavily_api_keys=getKeys.tavily_api_keys, keys_to_try=None):
     """Search using Tavily API. Returns list of result dicts."""
-    if not getKeys.tavily_api_key:
+    if not tavily_api_keys:
         print("⚠️ No Tavily API key found, skipping search.")
         return []
 
-    try:
-        client = AsyncTavilyClient(api_key=getKeys.tavily_api_key)
-        response = await client.search(
-            query=query,
-            search_depth="basic",
-            max_results=10
-        )
+    if keys_to_try is None:
+        keys_to_try = tavily_api_keys[:]
+        random.shuffle(keys_to_try)
 
-        if len(response.get("results", [])) < 2:
+    i = 0
+    while i < len(keys_to_try):
+        key = keys_to_try[i]
+        key_exhausted = False
+        try:
+            client = AsyncTavilyClient(api_key=key)
             response = await client.search(
                 query=query,
-                max_results=num_results,
-                search_depth="basic",  # fallback to basic if advanced somehow fails
-            )   
+                search_depth="basic",
+                max_results=10
+            )
 
-        results = []
+            if len(response.get("results", [])) < 2:
+                response = await client.search(
+                    query=query,
+                    max_results=num_results,
+                    search_depth="basic",  # fallback to basic if advanced somehow fails
+                )   
 
-        for item in response.get("results", []):
-            results.append({
-                "title": item.get("title", ""),
-                "url": item.get("url", ""),
-                "description": item.get("content", ""),
-                "source": item.get("url", "").split("/")[2] if item.get("url") else "Unknown",
-            })
+            results = []
 
-        return results
+            for item in response.get("results", []):
+                results.append({
+                    "title": item.get("title", ""),
+                    "url": item.get("url", ""),
+                    "description": item.get("content", ""),
+                    "source": item.get("url", "").split("/")[2] if item.get("url") else "Unknown",
+                })
 
-    except Exception as e:
-        print(f"⚠️ Tavily search failed: {e}")
-        return []
+            return results
+
+        except Exception as e:
+            err = str(e)
+            if "429" in err or "rate limit" in err.lower() or "unauthorized" in err.lower() or "401" in err:
+                print(f"⚠️ Tavily key failed: {err}, trying next key...")
+                keys_to_try.pop(i)
+                key_exhausted = True
+            else:
+                print(f"⚠️ Tavily search failed: {e}")
+                return []
+        
+        if not key_exhausted:
+            i += 1
+
+    return []
 
 async def parallel_search(query, num_results=5):
     parallel_key = os.getenv("PARALLEL_API_KEY", "").strip()

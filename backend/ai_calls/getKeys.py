@@ -20,10 +20,12 @@ else:
 
 
 #getting the api keys from the .env file
-tavily_api_key = os.getenv("TAVILY_API_KEY", "").strip()
+tavily_api_keys = os.getenv("TAVILY_API_KEY", "").split(",")
+tavily_api_keys = [k.strip() for k in tavily_api_keys if k.strip()]
 gemini_api_keys = os.getenv("GEMINI_API_KEY", "").split(",")
 gemini_api_keys = [k.strip() for k in gemini_api_keys if k.strip()]
-groq_api_key = os.getenv("GROQ_API_KEY", "").strip()
+groq_api_keys = os.getenv("GROQ_API_KEY", "").split(",")
+groq_api_keys = [k.strip() for k in groq_api_keys if k.strip()]
 
 
 #groq models to try
