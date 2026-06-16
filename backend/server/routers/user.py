@@ -40,7 +40,7 @@ async def change_user_details(
         raise HTTPException(status_code=404, detail="User not found")
 
     if user.password is None and (data.password is not None or data.email is not None):
-        raise HTTPException(status_code=400, detail="User is not registered with google")
+        raise HTTPException(status_code=400, detail="User is registered with google")
 
 
 
