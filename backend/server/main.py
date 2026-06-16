@@ -25,7 +25,7 @@ if sys.platform == "win32":
 from .database import AsyncSessionLocal, Base, engine
 from .crud import cleanup_stale_jobs
 from .models import Job
-from .routers import auth, jobs
+from .routers import auth, jobs, user
 
 # ── Scheduled task ────────────────────────────────────────────────────────────
 
@@ -148,6 +148,7 @@ from sqlalchemy.exc import IntegrityError
 # Register routers
 app.include_router(auth.router)
 app.include_router(jobs.router)
+app.include_router(user.router)
 
 @app.exception_handler(IntegrityError)
 async def integrity_error_handler(request: Request, exc: IntegrityError):
