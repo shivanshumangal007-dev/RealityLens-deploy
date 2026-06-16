@@ -13,7 +13,7 @@ from ..crud import create_user, get_user, get_user_by_email, get_user_from_useri
 from ..database import get_db
 from ..Redis_Otp import redis_otp_db
 from .deps import get_current_user_id
-from .auth import send_otp_email
+from .auth import send_otp_email, enforce_otp_rate_limit
 from ..auth import get_password_hash
 import random
 import json
@@ -60,6 +60,8 @@ async def change_user_details(
         
         # Send OTP to the new email if changing email, otherwise to the current email
         target_email = data.email if data.email is not None else user.email
+        
+        await enforce_otp_rate_limit(target_email)
         
         try:
             await send_otp_email(target_email, otp_code)
@@ -127,3 +129,63 @@ async def verify_update_otp(
     await redis_otp_db.delete(f"pending_update:{cred.token}")
     
     return {"message": "User details updated successfully"}
+
+
+@router.post("/verify-delete")
+async def verify_delete_account(
+    cred: VerifyUpdateOtp,
+    db : AsyncSession = Depends(get_db)
+):
+    update_data_bytes = await redis_otp_db.get(f"pending_delete:{cred.token}")
+    if not update_data_bytes:
+        raise HTTPException(status_code=400, detail="OTP session expired or invalid. Please request a new OTP.")
+    
+    update_data = json.loads(update_data_bytes.decode("utf-8"))
+    
+    if update_data["otp"] != cred.otp:
+        raise HTTPException(status_code=400, detail="Invalid OTP code.")
+        
+    user_id = update_data["user_id"]
+    user = await get_user_from_userid(db, uuid.UUID(user_id))
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    # Delete user
+    await db.delete(user)
+    await db.commit()
+    
+    await redis_otp_db.delete(f"pending_delete:{cred.token}")
+    
+    return {"message": "User account deleted successfully"}
+
+
+@router.delete("/delete-account")
+async def delete_user_account(
+    user_id:str =  Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    user = await get_user_from_userid(db, uuid.UUID(user_id))
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    otp_code = str(random.randint(100000, 999999))
+        
+    await enforce_otp_rate_limit(user.email)
+        
+    try:
+        await send_otp_email(user.email, otp_code)
+    except Exception as e:
+        print(f"Failed to send OTP email: {e}")
+        raise HTTPException(status_code=500, detail="Failed to send OTP email")
+    
+    temp_token = uuid.uuid4().hex
+    update_data = {
+        "user_id": str(user.id),
+        "otp": otp_code,
+    }
+    
+    await redis_otp_db.setex(f"pending_delete:{temp_token}", 300, json.dumps(update_data))
+    
+    return {"status": "pending_otp", "access_token": temp_token, "message": f"OTP sent to {user.email}"}

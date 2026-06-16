@@ -38,6 +38,23 @@ load_dotenv()
 BREVO_API_KEY = os.getenv("BREVO_API_KEY")
 MAIL_FROM = os.getenv("MAIL_FROM")
 
+async def enforce_otp_rate_limit(email: str):
+    # Check 1-minute cooldown
+    cooldown = await redis_otp_db.get(f"otp_cooldown:{email}")
+    if cooldown:
+        raise HTTPException(status_code=429, detail="Please wait 1 minute before requesting another OTP.")
+
+    # Check 5-OTP per hour limit
+    count_str = await redis_otp_db.get(f"otp_count:{email}")
+    if count_str and int(count_str) >= 5:
+        raise HTTPException(status_code=429, detail="Maximum OTP requests reached. Please try again after an hour.")
+
+    # Apply limits
+    await redis_otp_db.setex(f"otp_cooldown:{email}", 60, "1")
+    count = await redis_otp_db.incr(f"otp_count:{email}")
+    if count == 1:
+        await redis_otp_db.expire(f"otp_count:{email}", 3600)
+
 async def send_otp_email(to_email: str, otp: str):
     url = "https://api.brevo.com/v3/smtp/email"
     headers = {
@@ -95,6 +112,8 @@ async def register_user(credentials: UserCredentials, db: AsyncSession = Depends
     # Generate a 6-digit OTP
     otp_code = str(random.randint(100000, 999999))
     
+    await enforce_otp_rate_limit(credentials.email)
+    
     # Send email
     try:
         await send_otp_email(credentials.email, otp_code)
@@ -135,6 +154,8 @@ async def login_user(credentials: UserLogin, db: AsyncSession = Depends(get_db))
 
     # Generate a 6-digit OTP
     otp_code = str(random.randint(100000, 999999))
+    
+    await enforce_otp_rate_limit(credentials.email)
     
     # Send email
     try:
