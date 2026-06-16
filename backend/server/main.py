@@ -123,10 +123,24 @@ async def lifespan(app: FastAPI):
 
 # ── App ───────────────────────────────────────────────────────────────────────
 
-app = FastAPI(title="RealityLens Backend", lifespan=lifespan)
+import os
+
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+fastapi_kwargs = {
+    "title": "RealityLens Backend",
+    "lifespan": lifespan,
+}
+
+if ENVIRONMENT.lower() in ("production", "prod", "deployed"):
+    fastapi_kwargs.update({
+        "docs_url": None,
+        "redoc_url": None,
+        "openapi_url": None,
+    })
+
+app = FastAPI(**fastapi_kwargs)
 
 from starlette.middleware.sessions import SessionMiddleware
-import os
 
 app.add_middleware(
     SessionMiddleware,
