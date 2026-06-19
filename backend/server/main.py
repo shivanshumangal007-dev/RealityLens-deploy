@@ -155,6 +155,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from starlette.middleware.base import BaseHTTPMiddleware
+from .rate_limit import global_rate_limit_middleware
+
+app.add_middleware(BaseHTTPMiddleware, dispatch=global_rate_limit_middleware)
+
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
