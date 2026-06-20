@@ -66,7 +66,7 @@ async def send_otp_email(to_email: str, otp: str):
         "sender": {"email": MAIL_FROM, "name": "RealityLens"},
         "to": [{"email": to_email}],
         "subject": "Your RealityLens OTP Code",
-        "htmlContent": f"<html><body><p>Your OTP code is <strong>{otp}</strong>. It expires in 5 minutes.</p></body></html>"
+        "htmlContent": f"<html><body><p>A new perspective awaits! Verify your RealityLens account with code: <strong>{otp}</strong><br>This code expires in 5 minutes.</p></body></html>"
     }
     async with httpx.AsyncClient() as client:
         response = await client.post(url, headers=headers, json=payload)
