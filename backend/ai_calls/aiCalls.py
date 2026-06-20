@@ -165,7 +165,7 @@ async def call_gemini(prompt, image_part=None, gemini_api_keys=getKeys.gemini_ap
         key = keys_to_try[i]
         key_exhausted = False
         # loop through the models
-        for model in getKeys.MODELS:
+        for model in getKeys.GEMINI_MODELS:
             # loop through the retries
             for attempt in range(MAX_RETRIES):
                 # check if the time limit is reached
@@ -353,17 +353,22 @@ async def tavily_search(query, num_results=5, tavily_api_keys=getKeys.tavily_api
         key_exhausted = False
         try:
             client = AsyncTavilyClient(api_key=key)
+            # Use topic="news" and time_range="week" to prioritize recent results
             response = await client.search(
                 query=query,
                 search_depth="basic",
-                max_results=10
+                max_results=10,
+                topic="news",
+                time_range="week",
             )
 
             if len(response.get("results", [])) < 2:
+                # If too few recent news results (e.g. historical facts, science),
+                # retry with NO topic and NO time filter so Wikipedia etc. are included
                 response = await client.search(
                     query=query,
                     max_results=num_results,
-                    search_depth="basic",  # fallback to basic if advanced somehow fails
+                    search_depth="basic",
                 )   
 
             results = []
@@ -374,6 +379,7 @@ async def tavily_search(query, num_results=5, tavily_api_keys=getKeys.tavily_api
                     "url": item.get("url", ""),
                     "description": item.get("content", ""),
                     "source": item.get("url", "").split("/")[2] if item.get("url") else "Unknown",
+                    "publish_date": item.get("published_date", ""),
                 })
 
             return results
@@ -446,8 +452,9 @@ def format_search_results(results):
 
     lines = []
     for i, r in enumerate(results, 1):
-        date = f" ({r.get('publish_date', 'date unknown')})" if r.get('publish_date') else ""
-        lines.append(f"{i}. {r['source']}{date}: {r['title']}")
+        date = r.get('publish_date', '')
+        date_str = f" (Published: {date})" if date else " (Published: date unknown)"
+        lines.append(f"{i}. {r['source']}{date_str}: {r['title']}")
         lines.append(f"   URL: {r['url']}")
         desc = (r['description'] or '')[:500]
         lines.append(f"   Summary: {desc}")

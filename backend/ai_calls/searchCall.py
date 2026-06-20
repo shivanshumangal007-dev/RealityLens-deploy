@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timezone
 from . import aiCalls
 
 
@@ -51,7 +52,9 @@ async def searchCall(extraction):
 
     search_results += image_results
 
-    search_text = aiCalls.format_search_results(search_results)
+    # Add today's date header so the scoring model can judge temporal relevance
+    today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    search_text = f"TODAY'S DATE: {today_str}\n\n" + aiCalls.format_search_results(search_results)
     print(f"📰 Found {len(search_results)} search results")
 
     return search_text

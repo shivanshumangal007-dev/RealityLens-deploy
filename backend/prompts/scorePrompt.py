@@ -5,7 +5,35 @@ A real event can be reported with fake, stock, or AI-generated visuals.
 Image authenticity and claim authenticity are separate — never conflate them.
 
 
-STEP 1 — PRIORITY CHECK (run FIRST, before anything else)
+STEP 0 — TEMPORAL RELEVANCE CHECK (run BEFORE everything else)
+
+The search results include "TODAY'S DATE" at the top and each result has a "Published" date.
+You MUST check whether the evidence is actually about the CURRENT claim, not a past event:
+
+- If a claim says something is happening NOW (e.g. "X has been closed", "Y just happened"):
+  → Sources must be from within the last 7 days to count as corroboration
+  → An article from months or years ago about a SIMILAR past event is NOT evidence for the current claim
+  → Example: A 2025 article about Strait of Hormuz tensions does NOT prove a June 2026 closure claim
+
+- If sources are about a DIFFERENT instance of a recurring event:
+  → They are "related" at best, never "supports"
+  → They should LOWER confidence, not raise it (the old event is not the claimed new one)
+
+- If ALL sources are stale (older than 7 days) and the claim is about a breaking/recent event:
+  → This is a strong red flag — a real breaking event would have fresh coverage
+  → Apply -0.3 penalty and note "No recent credible coverage found for this claimed current event"
+
+- Recency matters most for:
+  → Breaking news claims ("just happened", "breaking", posted hours/days ago)
+  → Claims about ongoing situations ("is happening", "has been", "currently")
+  → Claims with explicit or implied timestamps
+
+- Recency matters less for:
+  → Historical facts, scientific claims, biographical statements
+  → Claims that are inherently timeless (e.g. "the earth is flat")
+
+
+STEP 1 — PRIORITY CHECK (run after temporal relevance check)
 
 CREDIBLE SOURCE CORROBORATION
 IF 2+ independent credible sources confirm the core claim with matching details:
@@ -161,7 +189,7 @@ OUTPUT — return ONLY this JSON, no markdown, no commentary
   "reality_score": 0.00,
   "confidence": 0.00,
   "verdict": "LIKELY REAL | UNVERIFIED | SUSPICIOUS | LIKELY FAKE | SATIRE | UNREADABLE",
-  "explanation": "2-4 sentences: what was searched, what was found, main reason for verdict. If stock footage detected but event is news-confirmed, state both. If credible sources confirm the claim, cite them by name. If viral misinformation pattern, say so explicitly.",
+  "explanation": "2-4 sentences: what was searched, what was found, main reason for verdict. If stock footage detected but event is news-confirmed, state both. If credible sources confirm the claim, cite them by name. If viral misinformation pattern, say so explicitly. If sources are stale/outdated relative to a recent claim, say so explicitly.",
   "evidence": [
     {{
       "title": "...",
@@ -179,7 +207,8 @@ Rules:
 - Never round confidence to exactly 1.0
 - Social media results in evidence → stance = "related", never "supports"
 - Stock footage or AI image does NOT affect verdict if claim is confirmed by 2+ credible sources
-- Credible source status is determined by Step 2, not by how authoritative a result looks"""
+- Credible source status is determined by Step 2, not by how authoritative a result looks
+- TEMPORAL: Old articles about similar past events do NOT corroborate a current claim. Only sources covering the SAME event in the SAME time frame count as corroboration. An article from months ago about past tensions is "related", never "supports"."""
 
 
 

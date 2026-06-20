@@ -18,6 +18,30 @@ AI-powered fact verification tool using screenshot analysis. Analyzes visual cla
 - **Search**: Tavily API for web search, Parallel API for image search
 - **AI Models**: Groq, Google Gemini, Cloudflare Kimi
 
+## Backend Overview
+
+The RealityLens backend is a comprehensive FastAPI server responsible for:
+
+1. **Application Lifecycle & Database Management**:
+   - Sets up connections to PostgreSQL and Redis using SQLAlchemy.
+   - Automatically executes DB schema migrations and constraint adjustments on startup.
+   - Schedules background cleanup tasks (e.g., deleting jobs older than 10 days using APScheduler).
+   - Cleans up stale job states gracefully upon server restarts.
+
+2. **Middlewares & Security**:
+   - Configures CORS and handles Session management.
+   - Applies global rate limiting to prevent API abuse.
+   - Catches and formats database integrity errors into helpful HTTP responses (e.g., deleted users).
+
+3. **Core API Routers**:
+   - **Authentication (`/auth`)**: Handles user sign-up, login, and Redis-backed OTP flows.
+   - **User Management (`/user`)**: Provides endpoints for fetching and managing user profiles.
+   - **Jobs (`/jobs`)**: Acts as the central hub for queueing analysis tasks, tracking job completion status, and storing metadata (like Cloudinary image URLs and processing times).
+
+4. **Client & Health Services**:
+   - **`/health_check`**: Checks the server's running status.
+   - **`/update_check`**: Enforces minimum version requirements for the desktop client applications.
+
 ## Getting Started
 
 ### Prerequisites
