@@ -4,6 +4,7 @@ services/analysis.py
 Background processing: AI verification pipeline + Cloudinary upload.
 All the heavy-lifting that used to live in main.py lives here.
 """
+from fastapi import Depends
 import asyncio
 import io
 import os
@@ -19,15 +20,19 @@ from ..database import AsyncSessionLocal
 from ..crud import update_job_status, complete_job, fail_job
 from ..models import Job
 from ..redisDatabase import redis_db
+from ..routers.deps import get_current_user_id
+from sqlalchemy.ext.asyncio import AsyncSession
+from ..database import get_db
+from ..crud import create_user, get_user, get_user_by_email, get_user_from_userid
 
 # ── Rate limiting ─────────────────────────────────────────────────────────────
 
-async def rate_limit_using_redis(user_id: str) -> bool:
+async def rate_limit_using_redis(user_id: str, db: AsyncSession) -> bool:
     MAX_REQUESTS = 2
     WINDOW_SECONDS = 60
     
     # User with admin ID bypasses rate limiting
-    if user_id == "34955641-43b4-4fc7-b6fc-4b82d9929a57":
+    if get_user_plan(user_id, db):
         return True
 
     redis_key = f"rate_limit:{user_id}"
@@ -44,6 +49,28 @@ async def rate_limit_using_redis(user_id: str) -> bool:
     return True
 
 # ── AI verification pipeline ──────────────────────────────────────────────────
+
+async def get_user_plan(
+    user_id: str,
+    db: AsyncSession
+    ):
+
+    redis_key = f"user_plan:{user_id}"
+
+    user_plan = await redis_db.get(redis_key)
+
+    if user_plan:
+        return user_plan
+
+    user = await get_user_from_userid(db, uuid.UUID(user_id))
+
+    plan = user.plan if user else "free"
+
+    await redis_db.setex(redis_key, 3600, plan)
+
+    return plan
+    
+
 
 async def verify_content(image_path: str, on_status=None):
     """Run the three-phase AI pipeline: extract → search → score."""

@@ -31,7 +31,7 @@ from dotenv import load_dotenv
 import os
 import hashlib
 import base64
-
+from ..services.analysis import get_user_plan
 router = APIRouter(tags=["Authentication"])
 
 load_dotenv()
@@ -181,9 +181,13 @@ async def get_user_details(
     db: AsyncSession = Depends(get_db),
 ):
     user = await get_user_from_userid(db, uuid.UUID(user_id))
+    
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return {"username": user.username, "email": user.email}
+    
+    plan_info = await get_user_plan(db, user_id)
+
+    return {"username": user.username, "email": user.email, "plan": plan_info}
 
 # ── Google OAuth endpoints ────────────────────────────────────────────────────
 

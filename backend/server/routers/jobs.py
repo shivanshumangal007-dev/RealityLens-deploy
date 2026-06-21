@@ -36,7 +36,7 @@ async def submit_endpoint(
     db: AsyncSession = Depends(get_db),
 ):
     # Check rate limit first
-    allowed = await rate_limit_using_redis(user_id)
+    allowed = await rate_limit_using_redis(user_id, db)
     if not allowed:
         raise HTTPException(status_code=429, detail="Rate limit exceeded")
 
@@ -63,7 +63,7 @@ async def submit_text_endpoint(
     db: AsyncSession = Depends(get_db),
 ):
     # Check rate limit first
-    allowed = await rate_limit_using_redis(user_id)
+    allowed = await rate_limit_using_redis(user_id, db)
     if not allowed:
         raise HTTPException(status_code=429, detail="Rate limit exceeded")
 

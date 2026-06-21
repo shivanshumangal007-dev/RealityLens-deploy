@@ -17,6 +17,7 @@ from .auth import send_otp_email, enforce_otp_rate_limit
 from ..auth import get_password_hash
 import random
 import json
+from ..services.analysis import get_user_plan
 
 router = APIRouter(tags=["User"])
 

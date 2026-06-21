@@ -1,3 +1,5 @@
+from sqlalchemy import true
+from enum import Enum
 from sqlalchemy import Float
 from sqlalchemy import String, Integer, DateTime, ForeignKey, Text, JSON, UUID
 from sqlalchemy.dialects.postgresql import JSONB
@@ -8,6 +10,8 @@ import uuid
 import cloudinary
 import cloudinary.uploader
 import os
+from sqlalchemy import Enum as SQLEnum
+
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -18,6 +22,11 @@ cloudinary.config(
     secure=True  # Forces HTTPS URLs
 )
 
+class PlanEnum(str, Enum):
+    FREE = "free"
+    PRO = "pro"
+    ULTRA = "ultra"
+
 class User(Base):
     __tablename__ = "users"
 
@@ -26,6 +35,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String, unique = True, nullable=False)
     username: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     password: Mapped[str] = mapped_column(String, nullable=True)
+    plan : Mapped[str] = mapped_column(SQLEnum(PlanEnum), nullable=True, default=PlanEnum.FREE)
     jobs: Mapped[list["Job"]] = relationship("Job", back_populates="user")
 
 class Job(Base):
