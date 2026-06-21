@@ -32,7 +32,7 @@ async def rate_limit_using_redis(user_id: str, db: AsyncSession) -> bool:
     WINDOW_SECONDS = 60
     
     # User with admin ID bypasses rate limiting
-    if get_user_plan(user_id, db):
+    if await get_user_plan(user_id, db) == "premium":
         return True
 
     redis_key = f"rate_limit:{user_id}"
@@ -60,6 +60,8 @@ async def get_user_plan(
     user_plan = await redis_db.get(redis_key)
 
     if user_plan:
+        if isinstance(user_plan, bytes):
+            return user_plan.decode("utf-8")
         return user_plan
 
     user = await get_user_from_userid(db, uuid.UUID(user_id))

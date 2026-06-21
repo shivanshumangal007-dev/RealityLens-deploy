@@ -185,7 +185,7 @@ async def get_user_details(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    plan_info = await get_user_plan(db, user_id)
+    plan_info = await get_user_plan(user_id, db)
 
     return {"username": user.username, "email": user.email, "plan": plan_info}
 
