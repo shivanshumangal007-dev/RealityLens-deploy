@@ -23,9 +23,9 @@ cloudinary.config(
 )
 
 class PlanEnum(str, Enum):
-    FREE = "free"
-    PRO = "pro"
-    ULTRA = "ultra"
+    free = "free"
+    pro = "pro"
+    ultra = "ultra"
 
 class User(Base):
     __tablename__ = "users"
@@ -35,7 +35,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String, unique = True, nullable=False)
     username: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     password: Mapped[str] = mapped_column(String, nullable=True)
-    plan : Mapped[str] = mapped_column(SQLEnum(PlanEnum), nullable=True, default=PlanEnum.FREE)
+    plan : Mapped[str] = mapped_column(SQLEnum(PlanEnum), nullable=True, default=PlanEnum.free)
     jobs: Mapped[list["Job"]] = relationship("Job", back_populates="user")
 
 class Job(Base):

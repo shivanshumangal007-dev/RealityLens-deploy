@@ -28,11 +28,12 @@ from ..crud import create_user, get_user, get_user_by_email, get_user_from_useri
 # ── Rate limiting ─────────────────────────────────────────────────────────────
 
 async def rate_limit_using_redis(user_id: str, db: AsyncSession) -> bool:
-    MAX_REQUESTS = 2
-    WINDOW_SECONDS = 60
+    MAX_REQUESTS = 3
+    WINDOW_SECONDS = 120
     
     # User with admin ID bypasses rate limiting
-    if await get_user_plan(user_id, db) == "premium":
+    user_plan = await get_user_plan(user_id, db)
+    if user_plan in ("pro", "ultra"):
         return True
 
     redis_key = f"rate_limit:{user_id}"
