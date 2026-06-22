@@ -1,162 +1,230 @@
-# RealityLens
+<div align="center">
 
-AI-powered fact verification tool using screenshot analysis. Analyzes visual claims and provides verdicts based on web search and AI analysis.
+<!-- Animated Header -->
+<img src="https://capsule-render.vercel.app/api?type=waving&color=1D9E75&height=200&section=header&text=RealityLens&fontSize=72&fontColor=ffffff&fontAlignY=38&desc=AI-Powered%20Misinformation%20Detection&descAlignY=60&descColor=9FE1CB&animation=fadeIn" width="100%"/>
 
-## Features
+<!-- Badges -->
+<br/>
 
-- **Screenshot Capture**: Global hotkey-triggered screenshot tool
-- **Claim Extraction**: AI extracts verifiable claims from screenshots
-- **Web Search**: Searches for supporting/contradicting evidence
-- **Verdict Generation**: Returns reality score, confidence, and detailed analysis
-- **Multi-Platform**: Windows, macOS, and Linux support
+![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-1D9E75?style=for-the-badge&logoColor=white)
+![Electron](https://img.shields.io/badge/Electron-Desktop-47848F?style=for-the-badge&logo=electron&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-Backend-009688?style=for-the-badge&logo=fastapi&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-7F77DD?style=for-the-badge)
 
-## Architecture
+<br/>
 
-- **Frontend**: PyQt6 desktop app with tray integration
-- **Backend**: FastAPI server with async job processing
-- **Database**: PostgreSQL with SQLAlchemy ORM
-- **Search**: Tavily API for web search, Parallel API for image search
-- **AI Models**: Groq, Google Gemini, Cloudflare Kimi
+![Groq](https://img.shields.io/badge/AI-Groq-EF9F27?style=flat-square&logoColor=white)
+![Gemini](https://img.shields.io/badge/AI-Gemini-4285F4?style=flat-square&logo=google&logoColor=white)
+![Cloudflare](https://img.shields.io/badge/AI-Cloudflare%20Kimi-F38020?style=flat-square&logo=cloudflare&logoColor=white)
+![Tavily](https://img.shields.io/badge/Search-Tavily-1D9E75?style=flat-square&logoColor=white)
+![Redis](https://img.shields.io/badge/Cache-Redis-DC382C?style=flat-square&logo=redis&logoColor=white)
 
-## Backend Overview
+<br/>
 
-The RealityLens backend is a comprehensive FastAPI server responsible for:
+[![Website](https://img.shields.io/badge/🌐%20Website-realitylens.in-1D9E75?style=for-the-badge)](https://www.realitylens.in/)&nbsp;&nbsp;[![Electron App](https://img.shields.io/badge/🖥️%20Electron%20App-GitHub-47848F?style=for-the-badge&logo=github&logoColor=white)](https://github.com/shivanshumangal007-dev/realitylens-electron)
+ 
+<br/><br/>
 
-1. **Application Lifecycle & Database Management**:
-   - Sets up connections to PostgreSQL and Redis using SQLAlchemy.
-   - Automatically executes DB schema migrations and constraint adjustments on startup.
-   - Schedules background cleanup tasks (e.g., deleting jobs older than 10 days using APScheduler).
-   - Cleans up stale job states gracefully upon server restarts.
+> **Press `Ctrl+Shift+L`. Select a region. Get the truth.**  
+> RealityLens captures any claim on your screen and runs it through a multi-model AI pipeline  
+> to deliver a live fact-check verdict — without breaking your flow.
 
-2. **Middlewares & Security**:
-   - Configures CORS and handles Session management.
-   - Applies global rate limiting to prevent API abuse.
-   - Catches and formats database integrity errors into helpful HTTP responses (e.g., deleted users).
+<br/>
 
-3. **Core API Routers**:
-   - **Authentication (`/auth`)**: Handles user sign-up, login, and Redis-backed OTP flows.
-   - **User Management (`/user`)**: Provides endpoints for fetching and managing user profiles.
-   - **Jobs (`/jobs`)**: Acts as the central hub for queueing analysis tasks, tracking job completion status, and storing metadata (like Cloudinary image URLs and processing times).
+</div>
 
-4. **Client & Health Services**:
-   - **`/health_check`**: Checks the server's running status.
-   - **`/update_check`**: Enforces minimum version requirements for the desktop client applications.
+---
 
-## Getting Started
-
-### Prerequisites
-
-- Python 3.13+
-- PostgreSQL 12+ (for production)
-- API keys: Groq, Google Gemini, Tavily, Cloudflare (optional)
-
-### Installation
-
-```bash
-# Clone and install dependencies
-git clone <repo>
-cd RealityLens
-pip install -e .
-
-# Or use uv
-uv sync
-```
-
-### Configuration
-
-Create `.env` file:
-
-```env
-# AI/Search APIs
-GROQ_API_KEY=your_key
-GEMINI_API_KEYS=key1,key2,key3
-TAVILY_API_KEY=your_key
-CLOUDFLARE_AUTH_TOKEN=your_token
-ACCOUNT_ID=your_account_id
-
-# Database
-DATABASE_URL=postgresql://user:password@localhost/realitylens
-
-# Server
-DEPLOYED_SERVER_URL=http://localhost:8000
-```
-
-### Running
-
-**Desktop App:**
-
-```bash
-python app/main.py
-# Or: uv run app/main.py
-```
-
-**Backend Server:**
-
-```bash
-uvicorn backend.server.main:app --reload
-# Or: uv run uvicorn backend.server.main:app --reload
-```
-
-Hotkey: **Ctrl+Shift+L** (Win/Linux) or **Cmd+Shift+L** (Mac)
-
-## Building
-
-```bash
-python build_all.py
-```
-
-Distributable will be in `dist/` folder.
-
-## API Endpoints
-
-### HTTP Endpoints
-
-- `POST /submit` - Submit image for analysis (returns job_id)
-- `GET /status/{job_id}` - Poll job status
-- `GET /result/{job_id}` - Get analysis result (returns 202 if pending)
-- `GET /health_check` - Health check
-
-### WebSocket
-
-- `WS /ws/job/{job_id}` - Subscribe to real-time job updates
-
-### Job ID Details
-
-- **`job_id`**: Returned by `POST /submit` when a new analysis job is created. The server generates this as a UUID (using `uuid.uuid4()`), so each job receives a unique identifier. This is a per-job identifier — it is not a server-wide constant. If you need a server-wide ID shared across jobs, add a separate field in the job model.
-
-## Development
-
-### Project Structure
+## ✦ How It Works
 
 ```
-RealityLens/
-├── app/              # PyQt6 desktop app
-│  ├── main.py       # Entry point
-│  └── ui/           # UI components
-├── backend/         # FastAPI server
-│  ├── server/       # Server and DB
-│  ├── ai_calls/     # AI model wrappers
-│  └── prompts/      # Prompt templates
-├── pyproject.toml   # Dependencies
-└── build_all.py     # Build script
+  [ Global Hotkey ]  →  [ Screen Capture ]  →  [ Multi-Model AI ]  →  [ Web Evidence ]  →  [ Verdict Overlay ]
+   Ctrl + Shift + L     Transparent select     Groq · Gemini · Kimi    Tavily + Image        Live on screen
 ```
 
-### Database Setup
+---
+## 🌠 Glimpse into Reality Lens
 
-```bash
-# Create database
-createdb realitylens
+<div align="center">
+  <img src="./header.png" alt="Reality Lens Header Screenshot" style="border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.5); max-width: 100%;" />
+  <br/><br/>
+  <img src="./feature_image.png" alt="Reality Lens Features Screenshot" style="border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.5); max-width: 100%;" />
+</div>
 
-# Run migrations via SQLAlchemy (automatic on startup)
+---
+## ⚡ Core Capabilities
+
+<table>
+<tr>
+<td width="50%">
+
+### 🔍 Smart Screen Capture
+A system-wide hotkey launches a transparent overlay. Click and drag to select any region — the app captures it silently in the background without interrupting your workflow.
+
+</td>
+<td width="50%">
+
+### 🧠 Multi-Model AI Pipeline
+Three AI models run in parallel — Groq, Gemini, and Cloudflare Kimi — extracting claims and cross-validating them against each other for higher accuracy.
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+### 🌐 Real-Time Web Verification
+Every claim triggers a Tavily web search and a parallel reverse image lookup, surfacing live supporting or contradicting evidence from across the web.
+
+</td>
+<td width="50%">
+
+### 📊 Verdict with Score & Confidence
+Results include a **reality score (0–100)** and a **confidence level**, delivered directly in an overlay on your screen — no tab switching, no context loss.
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+### 🖥️ Native System Tray Integration
+RealityLens lives quietly in your menu bar. Closing the window keeps the hotkey active. Launch on startup, minimize to tray, single-instance locked.
+
+</td>
+<td width="50%">
+
+### 🔐 Secure Authentication
+Email + OTP registration, Google SSO, deep-link protocol callbacks (`realitylens://`), and OTP-gated account deletion — all covered.
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+### 📁 Full Verification History
+Every analysis is logged: thumbnail preview, extracted claim, verdict, and execution time. A nightly cleanup auto-removes records older than 10 days.
+
+</td>
+<td width="50%">
+
+### 🛡️ Rate Limiting & Auto-Updates
+Redis-backed rate limiting prevents abuse. Built-in OTA updates via `electron-updater` check GitHub releases and prompt the user automatically.
+
+</td>
+</tr>
+</table>
+
+---
+
+## 🎯 Live Verdict Example
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  ● ● ●   REALITYLENS OVERLAY                                │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Claim: "5G towers disrupt bird migration via cellular      │
+│          interference — scientists confirm."                │
+│                                                             │
+│  Reality Score   ████░░░░░░░░░░░░░░░░░░   12 / 100          │
+│  Confidence      ████████████████████░░   94%               │
+│                                                             │
+│  ● FALSE — No peer-reviewed evidence found                  │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-## Deployment
+---
 
-1. Set environment variables
-2. Configure PostgreSQL
-3. Run backend: `uvicorn backend.server.main:app --host 0.0.0.0 --port 8000`
-4. Desktop app connects to `DEPLOYED_SERVER_URL`
+## 🏗️ Architecture
 
-## License
+```
+┌─────────────────────────────────────┐     ┌────────────────────────────────────┐
+│         ELECTRON DESKTOP APP        │     │           FASTAPI BACKEND          │
+│                                     │     │                                    │
+│  ┌─────────────┐  ┌──────────────┐  │     │  ┌──────────┐  ┌───────────────┐   │
+│  │  React UI   │  │ Global Hotkey│  │     │  │ Auth API │  │  Job Processor│   │
+│  │  Dashboard  │  │   Listener   │  │     │  │ OTP/SSO  │  │  (Async BG)   │   │
+│  └──────┬──────┘  └──────┬───────┘  │     │  └──────────┘  └───────┬───────┘   │
+│         │                │          │     │                         │          │
+│  ┌──────▼──────────────▼─────────┐  │ ──► │  ┌───────────────────▼────────┐    │
+│  │     Transparent Overlay       │  │     │  │   AI Orchestration Layer   │    │
+│  │   (Screenshot + Job Track)    │  │     │  │  Groq · Gemini · Kimi      │    │
+│  └───────────────────────────────┘  │     │  └────────────┬───────────────┘    │
+│                                     │     │               │                    │
+│  ┌──────────────────────────────┐   │     │  ┌────────────▼───────────────┐    │
+│  │  System Tray · Auto-Updater  │   │     │  │  Tavily Search · Image API │    │
+│  │  Startup · Single Instance   │   │     │  │  Redis Rate Limit · DB     │    │
+│  └──────────────────────────────┘   │     │  └────────────────────────────┘    │
+└─────────────────────────────────────┘     └────────────────────────────────────┘
+```
 
-Proprietary - All rights reserved
+---
+
+## 🧰 Tech Stack
+
+| Layer | Technologies |
+|---|---|
+| **Desktop** | Electron, React, electron-updater, electron-log |
+| **Backend** | FastAPI, Python, Redis, PostgreSQL |
+| **AI Models** | Groq, Google Gemini, Cloudflare Kimi |
+| **Search** | Tavily Web Search, Parallel Image Search API |
+| **Auth** | JWT, Google OAuth 2.0, Brevo OTP |
+| **Infrastructure** | Background job queue, nightly data cleanup, rate limiting |
+
+---
+
+## ✦ Feature Highlights
+
+<details>
+<summary><b>🔍 Verification Engine</b></summary>
+
+- **Screenshot Analysis** — hotkey-triggered capture with transparent region selector
+- **Text-Based Analysis** — submit any claim directly as text from the dashboard
+- **Async Job Processing** — UI stays responsive while AI runs in the background
+- **Reality Score** — 0–100 score with confidence level and detailed breakdown
+
+</details>
+
+<details>
+<summary><b>🖥️ Native Desktop</b></summary>
+
+- **System Tray** — minimizes to tray; hotkey stays active always
+- **Launch on Startup** — boots silently in the background
+- **Single Instance Lock** — no duplicate app windows
+- **OS Optimizations** — hardware acceleration tuned per platform for glitch-free overlays
+
+</details>
+
+<details>
+<summary><b>👤 Authentication</b></summary>
+
+- Email + password registration and login
+- 6-digit OTP email verification via Brevo
+- Google Single Sign-On across desktop and web
+- Custom deep-link protocol (`realitylens://`) for auth callbacks
+- OTP-confirmed account deletion
+
+</details>
+
+<details>
+<summary><b>⚙️ Settings & Resilience</b></summary>
+
+- Customizable global hotkey via interactive key recorder
+- OTA auto-updates from GitHub releases
+- Persistent local logging via `electron-log`
+- Rate limiting screen with graceful fallback UI
+- React error boundaries to prevent full app crashes
+
+</details>
+
+---
+
+<div align="center">
+
+<br/>
+**Don't believe everything you see. Let the machine check.**
+
+ 
+<br/>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=1D9E75&height=100&section=footer&fontColor=ffffff" width="100%"/>
+</div>
