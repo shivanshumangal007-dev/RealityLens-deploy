@@ -1,7 +1,8 @@
 <div align="center">
 
-<img src="./header.svg" width="100%"/>
+<img src="./header.jpeg" width="100%"/>
 
+<br/>
 <br/>
 
 <!-- Primary badges — bright teal-to-sky palette, matches app UI -->
