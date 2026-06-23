@@ -73,32 +73,6 @@
 
 ---
 
-## 🎯 Live Verdict — What You See
-
-```
-╔══════════════════════════════════════════════════════════════════╗
-║  REALITYLENS VERDICT                                  [ Close ]  ║
-╠══════════════════════════════════════════════════════════════════╣
-║                                                                  ║
-║  ✦ LIKELY REAL                                                   ║
-║                                                                  ║
-║  REALITY SCORE   ████████████████████████████████░░░░   0.92     ║
-║  CONFIDENCE      ████████████████████████████░░░░░░░░   88%      ║
-║                                                                  ║
-║  CLAIM EXTRACTED                                                 ║
-║  "Trump's warning led to Iran agreeing to let nuclear            ║
-║   inspectors back in."                                           ║
-║                                                                  ║
-║  EXPLANATION                                                     ║
-║  Multiple credible sources — Politico, The New York Times,       ║
-║  and Reuters — confirm Iran agreed to allow nuclear inspectors   ║
-║  back in. The underlying event is verified.                      ║
-║                                                                  ║
-╚══════════════════════════════════════════════════════════════════╝
-```
-
----
-
 ## ✦ Core Capabilities
 
 <table>
