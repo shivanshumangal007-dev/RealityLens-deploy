@@ -240,6 +240,6 @@ Redis-backed rate limiting prevents abuse. `electron-updater` silently checks Gi
 <br/>
 
 <!-- Footer: Cylinder style — closed lens ring gradient, matching header -->
-<img src="./footer.svg" width="100%"/>
+<img src="./footer.jpeg" width="100%"/>
 
 </div>
