@@ -261,6 +261,7 @@ Redis-backed rate limiting prevents abuse. `electron-updater` silently checks Gi
 
 [![Website](https://img.shields.io/badge/🌐%20realitylens.in-Visit%20Now-0d9488?style=for-the-badge)](https://www.realitylens.in/)&nbsp;&nbsp;
 [![Electron Repo](https://img.shields.io/badge/🖥️%20Desktop%20App-View%20on%20GitHub-0891b2?style=for-the-badge&logo=github&logoColor=white)](https://github.com/shivanshumangal007-dev/realitylens-electron)
+[![Android App](https://img.shields.io/badge/📱%20%20Mobile-Application%20Repo-0891b2?style=for-the-badge&logo=github&logoColor=white)](https://github.com/reyanshbhardwaj2005-spec/Reality-Lens-Android-Version.git)
 
 <br/>
 
