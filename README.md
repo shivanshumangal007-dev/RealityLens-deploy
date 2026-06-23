@@ -55,35 +55,21 @@
 
 ![Dashboard](./dashboard.png)
 
+> **Overlay Popup** — Transparent selection overlay for capturing claims anywhere on your screen.
+
+![Overlay Popup](./overlay-popup.png)
+
+> **Loading Popup** — Processing the captured claim across our multi-model AI pipeline.
+
+![Loading Popup](./loading-popup.png)
+
+> **Result Popup** — Instant transparent overlay delivering the verdict right on your screen.
+
+![Result Popup](./result-popup.png)
+
 > **Verdict Result** — Full breakdown with Reality Score, Confidence, extracted claim, and live evidence sources.
 
 ![Result](./verdict.png)
-
----
-
-## 🎯 Live Verdict — What You See
-
-```
-╔══════════════════════════════════════════════════════════════════╗
-║  REALITYLENS VERDICT                                  [ Close ]  ║
-╠══════════════════════════════════════════════════════════════════╣
-║                                                                  ║
-║  ✦ LIKELY REAL                                                   ║
-║                                                                  ║
-║  REALITY SCORE   ████████████████████████████████░░░░   0.92     ║
-║  CONFIDENCE      ████████████████████████████░░░░░░░░   88%      ║
-║                                                                  ║
-║  CLAIM EXTRACTED                                                 ║
-║  "Trump's warning led to Iran agreeing to let nuclear            ║
-║   inspectors back in."                                           ║
-║                                                                  ║
-║  EXPLANATION                                                     ║
-║  Multiple credible sources — Politico, The New York Times,       ║
-║  and Reuters — confirm Iran agreed to allow nuclear inspectors   ║
-║  back in. The underlying event is verified.                      ║
-║                                                                  ║
-╚══════════════════════════════════════════════════════════════════╝
-```
 
 ---
 
@@ -154,22 +140,22 @@ Redis-backed rate limiting prevents abuse. `electron-updater` silently checks Gi
 
 ```
 ┌──────────────────────────────────────────┐       ┌──────────────────────────────────────────┐
-│           ELECTRON DESKTOP APP           │       │              FASTAPI BACKEND              │
+│           ELECTRON DESKTOP APP           │       │              FASTAPI BACKEND             │
 │                                          │       │                                          │
 │   ┌──────────────┐   ┌────────────────┐  │       │   ┌─────────────┐   ┌─────────────────┐  │
 │   │   React UI   │   │  Global Hotkey │  │       │   │  Auth API   │   │  Job Processor  │  │
 │   │  Dashboard   │   │    Listener    │  │       │   │  OTP / SSO  │   │   (Async BG)    │  │
 │   └──────┬───────┘   └───────┬────────┘  │       │   └─────────────┘   └────────┬────────┘  │
-│          │                   │           │       │                               │           │
-│   ┌──────▼───────────────────▼────────┐  │──────▶│   ┌───────────────────────────▼────────┐  │
-│   │       Transparent Overlay         │  │       │   │      AI Orchestration Layer        │  │
-│   │    Screenshot · Job Tracking      │  │       │   │    Groq  ·  Gemini  ·  Kimi        │  │
-│   └───────────────────────────────────┘  │       │   └──────────────────┬─────────────────┘  │
-│                                          │       │                      │                    │
-│   ┌───────────────────────────────────┐  │       │   ┌──────────────────▼─────────────────┐  │
-│   │  System Tray · Auto-Updater       │  │       │   │  Tavily Search · Image Search API  │  │
-│   │  Startup · Single Instance Lock   │  │       │   │  Redis Rate Limiting · PostgreSQL   │  │
-│   └───────────────────────────────────┘  │       │   └────────────────────────────────────┘  │
+│          │                   │           │       │                               │          │
+│   ┌──────▼───────────────────▼────────┐  │──────▶│   ┌───────────────────────────▼────────┐ │
+│   │       Transparent Overlay         │  │       │   │      AI Orchestration Layer        │ │
+│   │    Screenshot · Job Tracking      │  │       │   │    Groq  ·  Gemini  ·  Kimi        │ │
+│   └───────────────────────────────────┘  │       │   └──────────────────┬─────────────────┘ │
+│                                          │       │                      │                   │
+│   ┌───────────────────────────────────┐  │       │   ┌──────────────────▼─────────────────┐ │
+│   │  System Tray · Auto-Updater       │  │       │   │  Tavily Search · Image Search API  │ │
+│   │  Startup · Single Instance Lock   │  │       │   │  Redis Rate Limiting · PostgreSQL  │ │
+│   └───────────────────────────────────┘  │       │   └────────────────────────────────────┘ │
 └──────────────────────────────────────────┘       └──────────────────────────────────────────┘
 ```
 
@@ -249,6 +235,7 @@ Redis-backed rate limiting prevents abuse. `electron-updater` silently checks Gi
 
 [![Website](https://img.shields.io/badge/🌐%20realitylens.in-Visit%20Now-0d9488?style=for-the-badge)](https://www.realitylens.in/)&nbsp;&nbsp;
 [![Electron Repo](https://img.shields.io/badge/🖥️%20Desktop%20App-View%20on%20GitHub-0891b2?style=for-the-badge&logo=github&logoColor=white)](https://github.com/shivanshumangal007-dev/realitylens-electron)
+[![Android App](https://img.shields.io/badge/📱%20%20Mobile-Application%20Repo-0891b2?style=for-the-badge&logo=github&logoColor=white)](https://github.com/reyanshbhardwaj2005-spec/Reality-Lens-Android-Version.git)
 
 <br/>
 
