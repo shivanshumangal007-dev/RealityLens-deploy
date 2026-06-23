@@ -166,22 +166,22 @@ Redis-backed rate limiting prevents abuse. `electron-updater` silently checks Gi
 
 ```
 ┌──────────────────────────────────────────┐       ┌──────────────────────────────────────────┐
-│           ELECTRON DESKTOP APP           │       │              FASTAPI BACKEND              │
+│           ELECTRON DESKTOP APP           │       │              FASTAPI BACKEND             │
 │                                          │       │                                          │
 │   ┌──────────────┐   ┌────────────────┐  │       │   ┌─────────────┐   ┌─────────────────┐  │
 │   │   React UI   │   │  Global Hotkey │  │       │   │  Auth API   │   │  Job Processor  │  │
 │   │  Dashboard   │   │    Listener    │  │       │   │  OTP / SSO  │   │   (Async BG)    │  │
 │   └──────┬───────┘   └───────┬────────┘  │       │   └─────────────┘   └────────┬────────┘  │
-│          │                   │           │       │                               │           │
-│   ┌──────▼───────────────────▼────────┐  │──────▶│   ┌───────────────────────────▼────────┐  │
-│   │       Transparent Overlay         │  │       │   │      AI Orchestration Layer        │  │
-│   │    Screenshot · Job Tracking      │  │       │   │    Groq  ·  Gemini  ·  Kimi        │  │
-│   └───────────────────────────────────┘  │       │   └──────────────────┬─────────────────┘  │
-│                                          │       │                      │                    │
-│   ┌───────────────────────────────────┐  │       │   ┌──────────────────▼─────────────────┐  │
-│   │  System Tray · Auto-Updater       │  │       │   │  Tavily Search · Image Search API  │  │
-│   │  Startup · Single Instance Lock   │  │       │   │  Redis Rate Limiting · PostgreSQL   │  │
-│   └───────────────────────────────────┘  │       │   └────────────────────────────────────┘  │
+│          │                   │           │       │                               │          │
+│   ┌──────▼───────────────────▼────────┐  │──────▶│   ┌───────────────────────────▼────────┐ │
+│   │       Transparent Overlay         │  │       │   │      AI Orchestration Layer        │ │
+│   │    Screenshot · Job Tracking      │  │       │   │    Groq  ·  Gemini  ·  Kimi        │ │
+│   └───────────────────────────────────┘  │       │   └──────────────────┬─────────────────┘ │
+│                                          │       │                      │                   │
+│   ┌───────────────────────────────────┐  │       │   ┌──────────────────▼─────────────────┐ │
+│   │  System Tray · Auto-Updater       │  │       │   │  Tavily Search · Image Search API  │ │
+│   │  Startup · Single Instance Lock   │  │       │   │  Redis Rate Limiting · PostgreSQL  │ │
+│   └───────────────────────────────────┘  │       │   └────────────────────────────────────┘ │
 └──────────────────────────────────────────┘       └──────────────────────────────────────────┘
 ```
 
