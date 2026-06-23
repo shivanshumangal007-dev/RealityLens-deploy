@@ -67,11 +67,15 @@ async def get_user_plan(
 
     user = await get_user_from_userid(db, uuid.UUID(user_id))
 
-    plan = user.plan if user else "free"
+    plan = user.plan.value if user and user.plan else "free"
 
     await redis_db.setex(redis_key, 3600, plan)
 
     return plan
+
+async def invalidate_user_plan_cache(user_id: str):
+    """Call this whenever a user's plan is changed to clear stale Redis data."""
+    await redis_db.delete(f"user_plan:{user_id}")
     
 
 

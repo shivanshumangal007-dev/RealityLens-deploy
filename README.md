@@ -55,6 +55,18 @@
 
 ![Dashboard](./dashboard.png)
 
+> **Overlay Popup** — Transparent selection overlay for capturing claims anywhere on your screen.
+
+![Overlay Popup](./overlay-popup.png)
+
+> **Loading Popup** — Processing the captured claim across our multi-model AI pipeline.
+
+![Loading Popup](./loading-popup.png)
+
+> **Result Popup** — Instant transparent overlay delivering the verdict right on your screen.
+
+![Result Popup](./result-popup.png)
+
 > **Verdict Result** — Full breakdown with Reality Score, Confidence, extracted claim, and live evidence sources.
 
 ![Result](./verdict.png)
