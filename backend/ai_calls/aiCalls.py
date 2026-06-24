@@ -8,6 +8,7 @@ from tavily import AsyncTavilyClient
 import httpx
 import asyncio
 import base64
+import re
 import backend.ai_calls.getKeys as getKeys
 
 
@@ -38,9 +39,22 @@ async def call_groq_vision(prompt, image_bytes, groq_api_keys=getKeys.groq_api_k
         for model in vision_models:
             # try to extract information
             try:
-                print(f"🔍 Extracting with Groq vision {model}...")
-                # send the prompt and image to the groq vision api
-                response = await groq_client.chat.completions.create(
+                is_openrouter = "google/" in model or "openrouter" in model.lower()
+                current_client = groq_client
+                if is_openrouter:
+                    print(f"🔄 Routing {model} to OpenRouter...")
+                    or_keys = getattr(getKeys, "openrouter_api_keys", [])
+                    if not or_keys:
+                        print("⚠️ No OpenRouter API key found.")
+                        continue
+                    or_key = random.choice(or_keys)
+                    current_client = AsyncGroq(api_key=or_key, base_url="https://openrouter.ai/api/v1")
+                else:
+                    print(f"🔍 Extracting with Groq vision {model}...")
+
+                # send the prompt and image to the vision api
+                call_start = time.time()
+                response = await current_client.chat.completions.create(
                     model=model,
                     messages=[
                         {
@@ -60,15 +74,24 @@ async def call_groq_vision(prompt, image_bytes, groq_api_keys=getKeys.groq_api_k
                         }
                     ],
                     temperature=0.1,
-                    max_tokens=1500,
+                    max_tokens=4000,
                 )
+                print(f"⏱️ {model} responded in {time.time() - call_start:.2f}s")
                 # get the raw response
                 raw = response.choices[0].message.content.strip()
-                # clean up the response
-                if raw.startswith("```json"):
-                    raw = raw.replace("```json", "", 1).replace("```", "", 1).strip()
-                elif raw.startswith("```"):
-                    raw = raw.replace("```", "", 2).strip()
+                # Remove think blocks if present
+                raw = re.sub(r'<think>.*?</think>', '', raw, flags=re.DOTALL).strip()
+                
+                # Try to extract from markdown blocks
+                json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', raw, re.DOTALL)
+                if json_match:
+                    raw = json_match.group(1).strip()
+                else:
+                    # Fallback to finding first { and last }
+                    start_idx = raw.find('{')
+                    end_idx = raw.rfind('}')
+                    if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                        raw = raw[start_idx:end_idx+1].strip()
 
                 return raw, None
 
@@ -108,8 +131,20 @@ async def call_groq_extraction(prompt, groq_api_keys=getKeys.groq_api_keys, keys
 
         for model in models:
             try:
-                print(f"🔍 Extracting with Groq text {model}...")
-                response = await groq_client.chat.completions.create(
+                is_openrouter = "google/" in model or "openrouter" in model.lower()
+                current_client = groq_client
+                if is_openrouter:
+                    print(f"🔄 Routing {model} to OpenRouter...")
+                    or_keys = getattr(getKeys, "openrouter_api_keys", [])
+                    if not or_keys:
+                        print("⚠️ No OpenRouter API key found.")
+                        continue
+                    or_key = random.choice(or_keys)
+                    current_client = AsyncGroq(api_key=or_key, base_url="https://openrouter.ai/api/v1")
+                else:
+                    print(f"🔍 Extracting with Groq text {model}...")
+
+                response = await current_client.chat.completions.create(
                     model=model,
                     messages=[
                         {
@@ -176,10 +211,12 @@ async def call_gemini(prompt, image_part=None, gemini_api_keys=getKeys.gemini_ap
                     # create the contents
                     contents = [prompt, image_part] if image_part else [prompt]
                     # send the prompt and image to the gemini ai
+                    call_start = time.time()
                     response = await client.aio.models.generate_content(
                         model=model,
                         contents=contents,
                     )
+                    print(f"⏱️ Gemini {model} responded in {time.time() - call_start:.2f}s")
                     # check if the response is empty
                     if not response or not getattr(response, "text", None):
                         last_error = "Empty response from AI."
@@ -293,8 +330,20 @@ async def call_groq(prompt, groq_api_keys=getKeys.groq_api_keys, keys_to_try=Non
         for model in getKeys.GROQ_MODELS:
             for attempt in range(MAX_RETRIES):
                 try:
-                    print(f"🤖 Scoring with Groq {model}...")
-                    response = await client.chat.completions.create(
+                    is_openrouter = "google/" in model or "openrouter" in model.lower()
+                    current_client = client
+                    if is_openrouter:
+                        or_keys = getattr(getKeys, "openrouter_api_keys", [])
+                        if not or_keys:
+                            print("⚠️ No OpenRouter API key found.")
+                            break
+                        or_key = random.choice(or_keys)
+                        current_client = AsyncGroq(api_key=or_key, base_url="https://openrouter.ai/api/v1")
+                        print(f"🔄 Scoring with OpenRouter {model}...")
+                    else:
+                        print(f"🤖 Scoring with Groq {model}...")
+
+                    response = await current_client.chat.completions.create(
                         model=model,
                             messages=[
                                 {"role": "system", "content": SCORING_SYSTEM_PROMPT},

@@ -40,6 +40,7 @@ async def extractionCall(image_path):
             extraction = json.loads(raw_extraction)
         except json.JSONDecodeError:
             print("⚠️ Groq returned invalid JSON, falling back to Gemini...")
+            print(f"Raw Response: {raw_extraction}")
             err = "Invalid JSON returned"
 
     #if groq fails, try gemini vision but gemini is trash so pray that groq works

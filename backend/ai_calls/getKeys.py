@@ -26,12 +26,14 @@ gemini_api_keys = os.getenv("GEMINI_API_KEY", "").split(",")
 gemini_api_keys = [k.strip() for k in gemini_api_keys if k.strip()]
 groq_api_keys = os.getenv("GROQ_API_KEY", "").split(",")
 groq_api_keys = [k.strip() for k in groq_api_keys if k.strip()]
+openrouter_api_keys = os.getenv("OPENROUTER_API_KEY", "").split(",")
+openrouter_api_keys = [k.strip() for k in openrouter_api_keys if k.strip()]
 
 
 #groq models to try
 GROQ_MODELS = [
     "llama-3.3-70b-versatile",        # Best quality, large context
-    "meta-llama/llama-4-scout-17b-16e-instruct",  # Fast fallback
+    "google/gemma-4-31b-it:free",     # Fast fallback (OpenRouter)
     "llama-3.1-8b-instant",           # Last resort, very fast
 ]
 
@@ -42,8 +44,7 @@ GEMINI_MODELS = [
 
 #vision models to try
 vision_models = [
-    "meta-llama/llama-4-scout-17b-16e-instruct",
-    "meta-llama/llama-4-maverick-17b-128e-instruct",
+    "qwen/qwen3.6-27b"
 ]
 #function to get the gemini client 
 def get_gemini_client(api_key):
