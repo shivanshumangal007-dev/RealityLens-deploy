@@ -25,6 +25,8 @@ dependencies = [
     # macOS-specific dependencies
     "pyobjc-framework-cocoa>=12.1; sys_platform == 'darwin'",
     "pyobjc-framework-quartz>=12.1; sys_platform == 'darwin'",
+    "openai>=2.44.0",
+    "pytesseract>=0.3.13",
 ]
 
 [tool.uv.workspace]

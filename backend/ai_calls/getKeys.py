@@ -44,7 +44,8 @@ GEMINI_MODELS = [
 
 #vision models to try
 vision_models = [
-    "qwen/qwen3.6-27b"
+    "openai/gpt-4o-mini",
+    "qwen/qwen3.6-27b",
 ]
 #function to get the gemini client 
 def get_gemini_client(api_key):

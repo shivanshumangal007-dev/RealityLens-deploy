@@ -1,0 +1,3 @@
+"llama-3.2-11b-vision-preview" = not working
+llama-3.2-90b-vision-preview = not working
+meta-llama/llama-4-maverick-17b-128e-instruct

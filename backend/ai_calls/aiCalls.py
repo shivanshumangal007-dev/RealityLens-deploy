@@ -4,6 +4,7 @@ import time
 import os
 import random
 from groq import AsyncGroq
+from openai import AsyncOpenAI
 from tavily import AsyncTavilyClient
 import httpx
 import asyncio
@@ -39,7 +40,7 @@ async def call_groq_vision(prompt, image_bytes, groq_api_keys=getKeys.groq_api_k
         for model in vision_models:
             # try to extract information
             try:
-                is_openrouter = "google/" in model or "openrouter" in model.lower()
+                is_openrouter = "/" in model
                 current_client = groq_client
                 if is_openrouter:
                     print(f"🔄 Routing {model} to OpenRouter...")
@@ -48,7 +49,7 @@ async def call_groq_vision(prompt, image_bytes, groq_api_keys=getKeys.groq_api_k
                         print("⚠️ No OpenRouter API key found.")
                         continue
                     or_key = random.choice(or_keys)
-                    current_client = AsyncGroq(api_key=or_key, base_url="https://openrouter.ai/api/v1")
+                    current_client = AsyncOpenAI(api_key=or_key, base_url="https://openrouter.ai/api/v1")
                 else:
                     print(f"🔍 Extracting with Groq vision {model}...")
 
@@ -131,7 +132,7 @@ async def call_groq_extraction(prompt, groq_api_keys=getKeys.groq_api_keys, keys
 
         for model in models:
             try:
-                is_openrouter = "google/" in model or "openrouter" in model.lower()
+                is_openrouter = "/" in model
                 current_client = groq_client
                 if is_openrouter:
                     print(f"🔄 Routing {model} to OpenRouter...")
@@ -140,7 +141,7 @@ async def call_groq_extraction(prompt, groq_api_keys=getKeys.groq_api_keys, keys
                         print("⚠️ No OpenRouter API key found.")
                         continue
                     or_key = random.choice(or_keys)
-                    current_client = AsyncGroq(api_key=or_key, base_url="https://openrouter.ai/api/v1")
+                    current_client = AsyncOpenAI(api_key=or_key, base_url="https://openrouter.ai/api/v1")
                 else:
                     print(f"🔍 Extracting with Groq text {model}...")
 
@@ -330,7 +331,7 @@ async def call_groq(prompt, groq_api_keys=getKeys.groq_api_keys, keys_to_try=Non
         for model in getKeys.GROQ_MODELS:
             for attempt in range(MAX_RETRIES):
                 try:
-                    is_openrouter = "google/" in model or "openrouter" in model.lower()
+                    is_openrouter = "/" in model
                     current_client = client
                     if is_openrouter:
                         or_keys = getattr(getKeys, "openrouter_api_keys", [])
@@ -338,7 +339,7 @@ async def call_groq(prompt, groq_api_keys=getKeys.groq_api_keys, keys_to_try=Non
                             print("⚠️ No OpenRouter API key found.")
                             break
                         or_key = random.choice(or_keys)
-                        current_client = AsyncGroq(api_key=or_key, base_url="https://openrouter.ai/api/v1")
+                        current_client = AsyncOpenAI(api_key=or_key, base_url="https://openrouter.ai/api/v1")
                         print(f"🔄 Scoring with OpenRouter {model}...")
                     else:
                         print(f"🤖 Scoring with Groq {model}...")
