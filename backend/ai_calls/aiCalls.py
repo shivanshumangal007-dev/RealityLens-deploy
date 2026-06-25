@@ -90,8 +90,16 @@ async def call_groq_vision(prompt, image_bytes, groq_api_keys=getKeys.groq_api_k
                     # Fallback to finding first { and last }
                     start_idx = raw.find('{')
                     end_idx = raw.rfind('}')
-                    if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
-                        raw = raw[start_idx:end_idx+1].strip()
+                    if start_idx != -1:
+                        if end_idx > start_idx:
+                            raw = raw[start_idx:end_idx+1].strip()
+                        else:
+                            # Likely truncated JSON missing a closing brace
+                            raw = raw[start_idx:].strip()
+                            if not raw.endswith('}'):
+                                if not raw.endswith('"'):
+                                    raw += '"'
+                                raw += '}'
 
                 return raw, None
 
