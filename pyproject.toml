@@ -29,6 +29,11 @@ dependencies = [
     "pytesseract>=0.3.13",
     "apscheduler>=3.10.4",
     "psycopg[binary]>=3.1.18",
+    "cloudinary>=1.44.2",
+    "pyjwt>=2.13.0",
+    "bcrypt>=5.0.0",
+    "redis>=8.0.1",
+    "httpx>=0.28.1",
 ]
 
 [tool.uv.workspace]
