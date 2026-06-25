@@ -3,7 +3,7 @@ name = "realitylens"
 version = "0.1.0"
 description = "AI-powered fact verification tool using screenshot analysis"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.13,<3.14"
 dependencies = [
     "dotenv>=0.9.9",
     "fastapi>=0.104.0",
@@ -36,6 +36,7 @@ dependencies = [
     "httpx>=0.28.1",
     "authlib>=1.7.2",
     "python-multipart>=0.0.32",
+    "itsdangerous>=2.2.0",
 ]
 
 [tool.uv.workspace]
